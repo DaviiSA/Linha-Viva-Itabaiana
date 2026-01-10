@@ -20,11 +20,6 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : [];
   });
 
-  const [transactions, setTransactions] = useState<Transaction[]>(() => {
-    const saved = localStorage.getItem('transactions');
-    return saved ? JSON.parse(saved) : [];
-  });
-
   const [sheetsUrl, setSheetsUrl] = useState<string>(() => {
     const saved = localStorage.getItem('sheetsUrl');
     return saved || GOOGLE_SHEETS_URL;
@@ -33,140 +28,198 @@ const App: React.FC = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSync, setLastSync] = useState<number | null>(null);
 
-  // Função para buscar dados da Planilha
   const fetchFromSheets = useCallback(async () => {
     const urlToUse = sheetsUrl || GOOGLE_SHEETS_URL;
     if (!urlToUse) return;
 
     setIsSyncing(true);
     try {
-      const response = await fetch(urlToUse);
+      const response = await fetch(`${urlToUse}?nocache=${Date.now()}`);
       if (response.ok) {
         const cloudData = await response.json();
         if (Array.isArray(cloudData) && cloudData.length > 0) {
           setInventory(cloudData);
           setLastSync(Date.now());
-          console.log("Linha Viva: Dados sincronizados da nuvem.");
+          localStorage.setItem('inventory', JSON.stringify(cloudData));
         }
       }
     } catch (error) {
-      console.warn("Linha Viva: Não foi possível baixar dados da nuvem. Usando local.", error);
+      console.warn("Linha Viva: Falha ao carregar dados da nuvem. Usando local.", error);
     } finally {
       setIsSyncing(false);
     }
   }, [sheetsUrl]);
 
-  // Sincroniza ao abrir o App
+  const syncToGoogleSheets = async (payload: any, type: string) => {
+    const urlToUse = sheetsUrl || GOOGLE_SHEETS_URL;
+    if (!urlToUse) {
+      console.error("URL da planilha não configurada.");
+      return false;
+    }
+
+    setIsSyncing(true);
+    try {
+      const response = await fetch(urlToUse, {
+        method: 'POST',
+        mode: 'cors', 
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8', // Obrigatório para evitar Preflight OPTIONS no Apps Script
+        },
+        body: JSON.stringify({ type, payload })
+      });
+      
+      const text = await response.text();
+      try {
+        const result = JSON.parse(text);
+        console.log(`Linha Viva: Sync [${type}] - ${result.status}`);
+        return result.status === 'success';
+      } catch (e) {
+        console.log(`Linha Viva: Resposta recebida, mas não é JSON. Verifique a implantação.`);
+        return true; // Muitas vezes o registro ocorre mesmo que o JSON falhe no retorno
+      }
+    } catch (error) {
+      console.error(`Linha Viva: Erro crítico na sincronização [${type}]`, error);
+      return false;
+    } finally {
+      setTimeout(() => setIsSyncing(false), 1500);
+    }
+  };
+
   useEffect(() => {
     fetchFromSheets();
   }, [fetchFromSheets]);
-
-  useEffect(() => {
-    localStorage.setItem('inventory', JSON.stringify(inventory));
-  }, [inventory]);
 
   useEffect(() => {
     localStorage.setItem('requests', JSON.stringify(requests));
   }, [requests]);
 
   useEffect(() => {
-    localStorage.setItem('transactions', JSON.stringify(transactions));
-  }, [transactions]);
-
-  useEffect(() => {
     localStorage.setItem('sheetsUrl', sheetsUrl);
   }, [sheetsUrl]);
 
-  const syncToGoogleSheets = async (payload: any, type: string) => {
-    const urlToUse = sheetsUrl || GOOGLE_SHEETS_URL;
-    if (!urlToUse) return;
+  const addItem = async (item: InventoryItem) => {
+    const updatedInv = [item, ...inventory];
+    setInventory(updatedInv);
+    localStorage.setItem('inventory', JSON.stringify(updatedInv));
 
-    setIsSyncing(true);
-    try {
-      await fetch(urlToUse, {
-        method: 'POST',
-        mode: 'no-cors',
-        cache: 'no-cache',
-        headers: {
-          'Content-Type': 'text/plain;charset=utf-8',
-        },
-        body: JSON.stringify({
-          type,
-          payload,
-          timestamp: new Date().toISOString()
-        })
-      });
-    } catch (error) {
-      console.error("Linha Viva: Erro de rede na sincronização", error);
-    } finally {
-      setTimeout(() => setIsSyncing(false), 800);
-    }
+    // Primeiro envia o estoque total
+    await syncToGoogleSheets(updatedInv, 'ATUALIZAR_ESTOQUE_TOTAL');
+    
+    // Depois registra a movimentação de entrada inicial
+    const logPayload = {
+      ID_TRANSACAO: `CAD-${Date.now()}`,
+      DATA: new Date().toLocaleString('pt-BR'),
+      ID_MATERIAL: item.id,
+      MATERIAL: item.name.toUpperCase(),
+      MOVIMENTACAO: 'ENTRADA',
+      QUANTIDADE: item.balance,
+      OBSERVACAO: `CADASTRO INICIAL`
+    };
+    
+    await syncToGoogleSheets(logPayload, 'MOVIMENTACAO_ESTOQUE');
   };
 
-  const processInventoryUpdate = (transaction: Omit<Transaction, 'id' | 'timestamp'>, currentInventory: InventoryItem[]) => {
-    const item = currentInventory.find(i => i.id === transaction.itemId);
-    const newTransaction: Transaction = {
+  const addTransaction = async (transaction: Omit<Transaction, 'id' | 'timestamp'>) => {
+    const item = inventory.find(i => i.id === transaction.itemId);
+    const itemName = item ? item.name : 'MATERIAL DESCONHECIDO';
+
+    const fullTx: Transaction = {
       ...transaction,
-      id: Math.random().toString(36).substr(2, 9),
+      id: `TX-${Date.now()}`,
       timestamp: Date.now(),
     };
 
-    const syncPayload = {
-      ...newTransaction,
-      itemName: item ? item.name : "Material Desconhecido"
-    };
-
-    setTransactions(prev => [newTransaction, ...prev]);
-    syncToGoogleSheets(syncPayload, 'MOVIMENTACAO_ESTOQUE');
-
-    return currentInventory.map(it => {
-      if (it.id === transaction.itemId) {
+    const updatedInv = inventory.map(i => {
+      if (i.id === transaction.itemId) {
         const delta = transaction.type === 'in' ? transaction.quantity : -transaction.quantity;
-        return { ...it, balance: Math.max(0, it.balance + delta) };
+        return { ...i, balance: Math.max(0, i.balance + delta) };
       }
-      return it;
+      return i;
     });
+
+    setInventory(updatedInv);
+    localStorage.setItem('inventory', JSON.stringify(updatedInv));
+
+    // 1. Log da Movimentação (Mais importante para rastro)
+    const logPayload = {
+      ID_TRANSACAO: fullTx.id,
+      DATA: new Date(fullTx.timestamp).toLocaleString('pt-BR'),
+      ID_MATERIAL: fullTx.itemId,
+      MATERIAL: itemName.toUpperCase(),
+      MOVIMENTACAO: fullTx.type === 'in' ? 'ENTRADA' : 'SAÍDA',
+      QUANTIDADE: fullTx.quantity,
+      OBSERVACAO: (fullTx.description || 'MOVIMENTAÇÃO MANUAL').toUpperCase()
+    };
+    await syncToGoogleSheets(logPayload, 'MOVIMENTACAO_ESTOQUE');
+
+    // 2. Atualiza Saldo na aba Estoque
+    await syncToGoogleSheets(updatedInv, 'ATUALIZAR_ESTOQUE_TOTAL');
   };
 
-  const addTransaction = (transaction: Omit<Transaction, 'id' | 'timestamp'>) => {
-    const updatedInventory = processInventoryUpdate(transaction, inventory);
-    setInventory(updatedInventory);
-    syncToGoogleSheets(updatedInventory, 'ATUALIZAR_ESTOQUE_TOTAL');
-  };
-
-  const addRequest = (request: Omit<MaterialRequest, 'id' | 'timestamp' | 'status'>) => {
+  const addRequest = async (request: Omit<MaterialRequest, 'id' | 'timestamp' | 'status'>) => {
     const newRequest: MaterialRequest = {
       ...request,
-      id: Math.random().toString(36).substr(2, 9),
+      id: Math.random().toString(36).substr(2, 9).toUpperCase(),
       timestamp: Date.now(),
       status: 'pending',
     };
+    
     setRequests(prev => [newRequest, ...prev]);
-    syncToGoogleSheets(newRequest, 'NOVA_SOLICITACAO');
+    
+    const requestPayload = {
+      ID_PEDIDO: newRequest.id,
+      DATA: new Date(newRequest.timestamp).toLocaleString('pt-BR'),
+      VTR: newRequest.vtr,
+      SOLICITANTE: newRequest.requesterName.toUpperCase(),
+      ITENS: newRequest.items.map(i => `${i.itemName} (${i.quantity})`).join(' | '),
+      STATUS: 'PENDENTE'
+    };
+
+    await syncToGoogleSheets(requestPayload, 'NOVA_SOLICITACAO');
   };
 
-  const updateRequestStatus = (id: string, status: 'pending' | 'served') => {
+  const updateRequestStatus = async (id: string, status: 'pending' | 'served') => {
     const request = requests.find(r => r.id === id);
-    if (!request) return;
+    if (!request || request.status === status) return;
 
     let updatedInv = [...inventory];
 
-    if (status === 'served' && request.status !== 'served') {
-      request.items.forEach(reqItem => {
-        updatedInv = processInventoryUpdate({
-          itemId: reqItem.itemId,
-          type: 'out',
-          quantity: reqItem.quantity,
-          description: `Atendimento VTR ${request.vtr}`
-        }, updatedInv);
-      });
+    if (status === 'served') {
+      setIsSyncing(true);
+      
+      // Itera sobre os itens do pedido e registra as movimentações e atualiza o saldo
+      for (const reqItem of request.items) {
+        updatedInv = updatedInv.map(invItem => {
+          if (invItem.id === reqItem.itemId) {
+            return { ...invItem, balance: Math.max(0, invItem.balance - reqItem.quantity) };
+          }
+          return invItem;
+        });
+
+        const logPayload = {
+          ID_TRANSACAO: `PED-${request.vtr}-${Date.now()}`,
+          DATA: new Date().toLocaleString('pt-BR'),
+          ID_MATERIAL: reqItem.itemId,
+          MATERIAL: reqItem.itemName.toUpperCase(),
+          MOVIMENTACAO: 'SAÍDA',
+          QUANTIDADE: reqItem.quantity,
+          OBSERVACAO: `ATENDIMENTO VTR ${request.vtr} - ${request.requesterName.toUpperCase()}`
+        };
+        
+        await syncToGoogleSheets(logPayload, 'MOVIMENTACAO_ESTOQUE');
+      }
       
       setInventory(updatedInv);
-      syncToGoogleSheets(updatedInv, 'ATUALIZAR_ESTOQUE_TOTAL');
+      localStorage.setItem('inventory', JSON.stringify(updatedInv));
+      await syncToGoogleSheets(updatedInv, 'ATUALIZAR_ESTOQUE_TOTAL');
     }
 
+    // Atualiza o status na planilha
     setRequests(prev => prev.map(req => req.id === id ? { ...req, status } : req));
-    syncToGoogleSheets({ id, status, vtr: request.vtr }, 'ATUALIZACAO_STATUS_PEDIDO');
+    await syncToGoogleSheets({ 
+      ID_PEDIDO: id, 
+      STATUS: status === 'served' ? 'ATENDIDO' : 'PENDENTE' 
+    }, 'ATUALIZACAO_STATUS_PEDIDO');
   };
 
   return (
@@ -182,9 +235,9 @@ const App: React.FC = () => {
           </Link>
           <div className="flex items-center gap-4">
             {isSyncing && (
-              <div className="flex items-center gap-2 text-[10px] bg-orange-500/20 text-orange-200 px-3 py-1.5 rounded-full animate-pulse border border-orange-500/30">
+              <div className="flex items-center gap-2 text-[10px] bg-orange-500/20 text-orange-200 px-4 py-2 rounded-full border border-orange-500/30 font-black animate-pulse">
                 <span className="w-2 h-2 bg-orange-400 rounded-full animate-ping"></span>
-                CONECTANDO NUVEM...
+                SINCRONIZANDO...
               </div>
             )}
           </div>
@@ -201,6 +254,7 @@ const App: React.FC = () => {
                   inventory={inventory} 
                   requests={requests} 
                   addTransaction={addTransaction}
+                  addItem={addItem}
                   updateRequestStatus={updateRequestStatus}
                   setInventory={setInventory}
                   sheetsUrl={sheetsUrl}
