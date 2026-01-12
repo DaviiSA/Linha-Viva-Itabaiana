@@ -2,7 +2,8 @@
 export interface InventoryItem {
   id: string;
   name: string;
-  balance: number;
+  balanceItabaiana: number;
+  balanceDores: number;
 }
 
 export interface RequestedItem {
@@ -14,6 +15,7 @@ export interface RequestedItem {
 export interface MaterialRequest {
   id: string;
   vtr: string;
+  region: string;
   items: RequestedItem[];
   status: 'pending' | 'served';
   timestamp: number;
@@ -25,6 +27,7 @@ export interface Transaction {
   itemId: string;
   type: 'in' | 'out';
   quantity: number;
+  region: 'ITABAIANA' | 'DORES';
   timestamp: number;
   description: string;
 }

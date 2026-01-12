@@ -13,6 +13,7 @@ interface Props {
 const RequestForm: React.FC<Props> = ({ inventory, addRequest, isSyncing }) => {
   const navigate = useNavigate();
   const [vtr, setVtr] = useState('');
+  const [region, setRegion] = useState<'ITABAIANA' | 'DORES'>('ITABAIANA');
   const [requesterName, setRequesterName] = useState('');
   const [selectedItems, setSelectedItems] = useState<RequestedItem[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -21,270 +22,183 @@ const RequestForm: React.FC<Props> = ({ inventory, addRequest, isSyncing }) => {
   const [isSuccess, setIsSuccess] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Fecha o dropdown ao clicar fora
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsDropdownOpen(false);
-      }
+    const handleClick = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) setIsDropdownOpen(false);
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
-  // Filtro de segurança para garantir que apenas MATERIAIS apareçam
   const availableItems = useMemo(() => {
+    // Filtro estrito: Apenas itens com saldo > 0 na regional selecionada
     return inventory.filter(i => {
-      const name = String(i.name).trim().toUpperCase();
-      const isNumeric = /^\d+$/.test(name);
-      const isVtr = VEHICLES.includes(name) || 
-                    VEHICLES.includes(name.replace('VTR', '').trim()) ||
-                    name.startsWith('VTR ');
-      const isSystemTag = [
-        'NOVA_SOLICITACAO', 
-        'ATUALIZAR_ESTOQUE_TOTAL', 
-        'ATUALIZACAO_STATUS_PEDIDO', 
-        'MOVIMENTACAO_ESTOQUE',
-        'STATUS', 'PENDING', 'SERVED'
-      ].includes(name);
-
-      const hasBalance = i.balance > 0;
-      const isValidLength = name.length > 3;
-
-      return hasBalance && !isVtr && !isSystemTag && !isNumeric && isValidLength;
+      const balance = region === 'ITABAIANA' ? i.balanceItabaiana : i.balanceDores;
+      return balance > 0 && i.name.length > 2;
     });
-  }, [inventory]);
+  }, [inventory, region]);
 
-  // Filtra a lista baseada no que o usuário digita ou mostra todos se aberto
   const filteredOptions = useMemo(() => {
     const search = searchTerm.toLowerCase().trim();
-    if (!search) return availableItems.slice(0, 100); // Mostra os primeiros 100 se vazio
-    
-    return availableItems.filter(item => 
-      item.name.toLowerCase().includes(search) || 
-      item.id.includes(search)
-    ).slice(0, 100);
+    if (!search) return availableItems.slice(0, 50);
+    return availableItems.filter(i => i.name.toLowerCase().includes(search) || i.id.includes(search)).slice(0, 50);
   }, [searchTerm, availableItems]);
 
   const handleAddItem = (item?: InventoryItem) => {
-    const targetItem = item || availableItems.find(i => i.id === currentItem.itemId);
-    
-    if (!targetItem) {
-      alert("Por favor, selecione um material da lista.");
+    const target = item || availableItems.find(i => i.id === currentItem.itemId);
+    if (!target) return;
+
+    const currentBalance = region === 'ITABAIANA' ? target.balanceItabaiana : target.balanceDores;
+    if (currentItem.quantity > currentBalance) {
+      alert(`Saldo insuficiente em ${region}. Disponível: ${currentBalance}`);
       return;
     }
 
-    if (currentItem.quantity > targetItem.balance) {
-      alert(`Ops! Só temos ${targetItem.balance} em estoque.`);
-      return;
-    }
-
-    const existingIndex = selectedItems.findIndex(i => i.itemId === targetItem.id);
-    if (existingIndex >= 0) {
-      const updated = [...selectedItems];
-      if ((updated[existingIndex].quantity + currentItem.quantity) > targetItem.balance) {
-         alert(`Quantidade total excede o estoque (${targetItem.balance}).`);
-         return;
+    const existing = selectedItems.find(i => i.itemId === target.id);
+    if (existing) {
+      if ((existing.quantity + currentItem.quantity) > currentBalance) {
+        alert("Quantidade total excede o estoque da regional.");
+        return;
       }
-      updated[existingIndex].quantity += currentItem.quantity;
-      setSelectedItems(updated);
+      setSelectedItems(prev => prev.map(i => i.itemId === target.id ? { ...i, quantity: i.quantity + currentItem.quantity } : i));
     } else {
-      setSelectedItems(prev => [...prev, { itemId: targetItem.id, itemName: targetItem.name, quantity: currentItem.quantity }]);
+      setSelectedItems(prev => [...prev, { itemId: target.id, itemName: target.name, quantity: currentItem.quantity }]);
     }
-    
     setSearchTerm('');
     setCurrentItem({ itemId: '', quantity: 1 });
     setIsDropdownOpen(false);
   };
 
-  const removeItem = (id: string) => {
-    setSelectedItems(prev => prev.filter(i => i.itemId !== id));
-  };
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!vtr) { alert("Selecione a Viatura."); return; }
-    if (selectedItems.length === 0) { alert("Adicione ao menos um material."); return; }
-
-    addRequest({
-      vtr,
-      requesterName: requesterName.toUpperCase() || 'COLABORADOR',
-      items: selectedItems
-    });
-
+    if (!vtr || selectedItems.length === 0) return;
+    addRequest({ vtr, region, requesterName: requesterName.toUpperCase() || 'COLABORADOR', items: selectedItems });
     setIsSuccess(true);
     setTimeout(() => navigate('/'), 2500);
   };
 
   if (isSuccess) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[75vh] p-6 text-center space-y-8 animate-fade-in">
-        <div className="bg-green-500 p-8 rounded-[3rem] text-white shadow-2xl shadow-green-100 animate-bounce">
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-24 w-24" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-          </svg>
+      <div className="flex flex-col items-center justify-center min-h-[75vh] p-6 text-center animate-fade-in">
+        <div className="bg-green-500 p-8 rounded-[3rem] text-white shadow-2xl animate-bounce mb-8">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-20 w-20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
         </div>
-        <div className="space-y-4">
-          <h2 className="text-4xl font-black text-[#003366]">Pedido Realizado!</h2>
-          <p className="text-slate-500 font-bold max-w-sm mx-auto text-lg leading-relaxed">
-            Sua solicitação foi enviada e está sendo processada.
-          </p>
-        </div>
+        <h2 className="text-3xl font-black text-[#003366]">Pedido Enviado!</h2>
+        <p className="text-slate-400 font-bold uppercase text-[10px] mt-2">Retirada em: {region}</p>
       </div>
     );
   }
 
   return (
-    <div className="p-4 md:p-8 max-w-4xl mx-auto space-y-8 animate-fade-in-up">
-      <div className="bg-white p-6 md:p-14 rounded-[3rem] shadow-2xl border border-slate-50">
-        <div className="mb-10 text-center">
-           <div className="inline-block bg-orange-50 text-[#FF8C00] px-4 py-1 rounded-full text-[10px] font-black tracking-widest uppercase mb-4">Requisição Operacional</div>
-           <h2 className="text-3xl font-black text-[#003366] tracking-tight">Lista de <span className="text-[#FF8C00]">Materiais</span></h2>
-        </div>
+    <div className="p-4 md:p-8 max-w-4xl mx-auto animate-fade-in-up">
+      <div className="bg-white p-6 md:p-12 rounded-[3rem] shadow-2xl border border-slate-50">
+        <h2 className="text-3xl font-black text-[#003366] text-center mb-10">Solicitar <span className="text-[#FF8C00]">Material</span></h2>
         
         <form onSubmit={handleSubmit} className="space-y-8">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Viatura (VTR)</label>
-              <select 
-                className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-[1.5rem] focus:bg-white focus:border-[#003366] outline-none transition-all font-black text-[#003366]"
-                value={vtr}
-                onChange={e => setVtr(e.target.value)}
-                required
-              >
-                <option value="">Selecione...</option>
-                {VEHICLES.map(v => <option key={v} value={v}>VTR {v}</option>)}
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Retirar em:</label>
+              <div className="flex bg-slate-100 p-1 rounded-2xl">
+                <button type="button" onClick={() => { setRegion('ITABAIANA'); setSelectedItems([]); }} className={`flex-1 py-4 rounded-xl font-black text-[10px] uppercase transition-all ${region === 'ITABAIANA' ? 'bg-white text-[#003366] shadow-sm' : 'text-slate-400'}`}>Itabaiana</button>
+                <button type="button" onClick={() => { setRegion('DORES'); setSelectedItems([]); }} className={`flex-1 py-4 rounded-xl font-black text-[10px] uppercase transition-all ${region === 'DORES' ? 'bg-white text-[#003366] shadow-sm' : 'text-slate-400'}`}>Dores</button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">VTR / Viatura</label>
+              <select className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#003366] outline-none font-black text-[#003366] transition-colors" value={vtr} onChange={e => setVtr(e.target.value)} required>
+                <option value="" className="text-slate-400">Selecione...</option>
+                {VEHICLES.map(v => <option key={v} value={v} className="text-slate-800 font-bold">VTR {v}</option>)}
               </select>
             </div>
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Responsável</label>
-              <input 
-                type="text" 
-                autoComplete="off"
-                className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-[1.5rem] focus:bg-white focus:border-[#003366] outline-none transition-all font-bold text-slate-700 uppercase"
-                placeholder="Seu nome"
-                value={requesterName}
-                onChange={e => setRequesterName(e.target.value)}
-                required
-              />
+
+            <div className="md:col-span-2 space-y-2">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nome do Solicitante</label>
+              <input type="text" className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none font-bold uppercase text-slate-800 placeholder:text-slate-300 focus:border-[#003366] transition-colors" placeholder="Nome Completo" value={requesterName} onChange={e => setRequesterName(e.target.value)} required />
             </div>
           </div>
 
-          <div className="bg-slate-50 p-6 md:p-10 rounded-[2.5rem] space-y-6 border border-slate-100 relative shadow-inner">
-            <div className="absolute -top-4 left-10 bg-white px-4 py-1.5 text-[10px] font-black text-[#FF8C00] uppercase tracking-widest border border-orange-100 rounded-full">Adicionar Materiais</div>
+          <div className="bg-slate-50 p-6 md:p-10 rounded-[2.5rem] space-y-6 relative shadow-inner">
+            <div className="absolute -top-3 left-10 bg-white px-4 py-1 text-[9px] font-black text-[#FF8C00] uppercase tracking-widest border rounded-full">Estoque Disponível</div>
             
-            <div className="flex flex-col md:flex-row gap-4 items-start" ref={dropdownRef}>
-              <div className="flex-[4] w-full space-y-2 relative">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Selecionar Material (Com Saldo)</label>
-                <div className="relative">
-                  <input 
-                    type="text"
-                    autoComplete="off"
-                    placeholder="Clique para ver a lista ou digite o nome..."
-                    className="w-full p-5 bg-white border-2 border-slate-200 rounded-[1.5rem] focus:border-[#FF8C00] outline-none transition-all font-bold text-slate-700"
-                    value={searchTerm}
-                    onFocus={() => setIsDropdownOpen(true)}
-                    onChange={e => {
-                      setSearchTerm(e.target.value);
-                      setIsDropdownOpen(true);
-                      if (!e.target.value) setCurrentItem({ itemId: '', quantity: currentItem.quantity });
-                    }}
-                  />
-                  <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-300">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </div>
-                </div>
+            <div className="flex flex-col md:flex-row gap-4 items-end" ref={dropdownRef}>
+              <div className="flex-1 space-y-2 relative">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Buscar Material</label>
+                <input 
+                  type="text" 
+                  placeholder="Ex: Abracadeira..." 
+                  className="w-full p-4 bg-white border-2 border-slate-100 rounded-2xl outline-none font-bold text-slate-800 placeholder:text-slate-400 focus:border-[#FF8C00] transition-colors" 
+                  value={searchTerm} 
+                  onFocus={() => setIsDropdownOpen(true)} 
+                  onChange={e => { setSearchTerm(e.target.value); setIsDropdownOpen(true); }} 
+                />
                 
-                {/* Dropdown de materiais com saldo proeminente */}
                 {isDropdownOpen && (
-                  <div className="absolute z-50 left-0 right-0 mt-2 bg-white border-2 border-slate-100 rounded-2xl shadow-2xl overflow-hidden animate-scale-up max-h-[350px] overflow-y-auto">
-                    {filteredOptions.length > 0 ? (
+                  <div className="absolute z-50 left-0 right-0 mt-2 bg-white border-2 border-slate-200 rounded-2xl shadow-2xl max-h-64 overflow-y-auto overflow-x-hidden animate-scale-up border-orange-100">
+                    {filteredOptions.length === 0 ? (
+                      <div className="p-4 text-center text-xs font-bold text-slate-400 uppercase">Nenhum material com saldo em {region}</div>
+                    ) : (
                       filteredOptions.map(item => (
-                        <button
-                          key={item.id}
-                          type="button"
-                          onClick={() => {
-                            setCurrentItem({ itemId: item.id, quantity: currentItem.quantity });
-                            setSearchTerm(item.name);
-                            setIsDropdownOpen(false);
-                          }}
-                          className={`w-full text-left px-5 py-4 hover:bg-orange-50 transition-colors border-b border-slate-50 last:border-0 flex justify-between items-center ${currentItem.itemId === item.id ? 'bg-orange-50 border-l-4 border-l-[#FF8C00]' : ''}`}
+                        <button 
+                          key={item.id} 
+                          type="button" 
+                          onClick={() => { setCurrentItem({ ...currentItem, itemId: item.id }); setSearchTerm(item.name); setIsDropdownOpen(false); }} 
+                          className="w-full text-left px-5 py-4 hover:bg-orange-50 border-b border-slate-50 last:border-0 group transition-colors"
                         >
-                          <div className="flex-1 pr-4">
-                            <div className="font-bold text-slate-800 text-sm leading-tight uppercase">{item.name}</div>
-                            <div className="text-[9px] font-black text-slate-400 uppercase mt-1">CÓD: {item.id}</div>
-                          </div>
-                          <div className="flex flex-col items-end shrink-0">
-                             <div className="text-[14px] font-black text-[#FF8C00]">{item.balance}</div>
-                             <div className="text-[8px] font-black text-slate-400 uppercase tracking-tighter">DISPONÍVEL</div>
+                          <div className="text-[11px] font-black uppercase truncate text-slate-900 group-hover:text-[#FF8C00]">{item.name}</div>
+                          <div className="flex justify-between items-center mt-1">
+                            <span className="text-[9px] text-slate-400 font-mono font-bold tracking-tighter">CÓDIGO: {item.id}</span>
+                            <span className="text-[10px] font-black text-[#FF8C00] bg-orange-100/50 px-2 py-0.5 rounded-md uppercase">
+                              SALDO {region}: {region === 'ITABAIANA' ? item.balanceItabaiana : item.balanceDores}
+                            </span>
                           </div>
                         </button>
                       ))
-                    ) : (
-                      <div className="p-6 text-center text-slate-400 font-bold text-xs uppercase">Nenhum material encontrado</div>
                     )}
                   </div>
                 )}
               </div>
-              
-              <div className="flex-1 w-full space-y-2">
+              <div className="w-full md:w-24 space-y-2">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center block">Qtd</label>
                 <input 
                   type="number" 
-                  min="1"
-                  className="w-full p-5 bg-white border-2 border-slate-200 rounded-[1.5rem] focus:border-[#FF8C00] outline-none transition-all font-black text-[#FF8C00] text-center text-xl"
-                  value={currentItem.quantity}
-                  onChange={e => setCurrentItem({...currentItem, quantity: Math.max(1, Number(e.target.value))})}
+                  min="1" 
+                  className="w-full p-4 bg-white border-2 border-slate-100 rounded-2xl font-black text-center text-xl text-slate-800 outline-none focus:border-[#FF8C00]" 
+                  value={currentItem.quantity} 
+                  onChange={e => setCurrentItem({...currentItem, quantity: Math.max(1, Number(e.target.value))})} 
                 />
               </div>
-              
               <button 
                 type="button" 
                 onClick={() => handleAddItem()} 
-                className="w-full md:w-auto mt-6 md:mt-0 bg-[#FF8C00] text-white px-10 py-5 rounded-[1.5rem] font-black text-2xl hover:bg-orange-600 transition-all shadow-xl shadow-orange-100 active:scale-95"
+                className="w-full md:w-auto bg-[#FF8C00] text-white px-8 py-4 rounded-2xl font-black text-2xl shadow-lg shadow-orange-100 hover:bg-orange-600 transition-all active:scale-95 flex items-center justify-center"
               >
                 +
               </button>
             </div>
 
-            {selectedItems.length > 0 ? (
-              <div className="grid grid-cols-1 gap-3 pt-4">
-                <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2 mb-2">Itens na Lista:</h5>
-                {selectedItems.map((item, idx) => (
-                  <div key={idx} className="flex items-center justify-between bg-white p-4 rounded-2xl border border-slate-100 shadow-sm group animate-scale-up">
-                    <div className="flex items-center gap-4">
-                      <div className="bg-orange-50 text-[#FF8C00] w-10 h-10 flex items-center justify-center rounded-xl font-black text-sm">
-                        {item.quantity}
-                      </div>
-                      <div className="font-bold text-slate-700 text-xs md:text-sm uppercase">{item.itemName}</div>
-                    </div>
-                    <button 
-                      type="button" 
-                      onClick={() => removeItem(item.itemId)} 
-                      className="p-2 text-slate-300 hover:text-red-500 transition-all"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
+            <div className="space-y-3 pt-4 border-t border-slate-200">
+              {selectedItems.length > 0 && <h4 className="text-[9px] font-black text-slate-400 uppercase mb-2">Materiais para Retirar em {region}:</h4>}
+              {selectedItems.map((item, idx) => (
+                <div key={idx} className="flex justify-between items-center bg-white p-4 rounded-2xl border border-slate-100 shadow-sm animate-scale-up">
+                  <span className="text-xs font-black text-slate-700 uppercase leading-tight max-w-[70%]">{item.itemName}</span>
+                  <div className="flex items-center gap-4">
+                    <span className="bg-orange-50 text-[#FF8C00] px-3 py-1 rounded-lg font-black text-sm border border-orange-100">x{item.quantity}</span>
+                    <button type="button" onClick={() => setSelectedItems(prev => prev.filter(i => i.itemId !== item.itemId))} className="text-slate-300 hover:text-red-500 transition-colors">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                     </button>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-8 border-2 border-dashed border-slate-200 rounded-[2rem] text-slate-400 font-bold text-xs uppercase">
-                Selecione o material acima e clique no botão +
-              </div>
-            )}
+                </div>
+              ))}
+            </div>
           </div>
 
-          <button
-            type="submit"
-            disabled={isSyncing || selectedItems.length === 0}
-            className={`w-full font-black py-6 rounded-[2rem] shadow-2xl transition-all uppercase tracking-widest text-lg active:scale-95 ${isSyncing || selectedItems.length === 0 ? 'bg-slate-200 text-slate-400' : 'bg-[#003366] text-white hover:bg-blue-900'}`}
+          <button 
+            type="submit" 
+            disabled={isSyncing || selectedItems.length === 0} 
+            className="w-full bg-[#003366] text-white py-6 rounded-3xl font-black text-lg uppercase shadow-2xl shadow-blue-100 disabled:bg-slate-200 disabled:text-slate-400 transition-all active:scale-95 hover:bg-blue-900"
           >
-            {isSyncing ? 'Sincronizando...' : 'Enviar Pedido'}
+            {isSyncing ? 'Sincronizando...' : 'Finalizar Pedido'}
           </button>
         </form>
       </div>

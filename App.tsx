@@ -9,10 +9,61 @@ import AdminDashboard from './screens/AdminDashboard';
 import RequestForm from './screens/RequestForm';
 import AdminLogin from './screens/AdminLogin';
 
+// Helper para migrar, filtrar e de-duplicar dados da nuvem
+const migrateInventory = (items: any[]): InventoryItem[] => {
+  if (!Array.isArray(items)) return [];
+
+  const SYSTEM_KEYWORDS = [
+    'NOVA_SOLICITACAO', 
+    'ATUALIZACAO_STATUS_PEDIDO', 
+    'MOVIMENTACAO_ESTOQUE', 
+    'ATUALIZAR_ESTOQUE_TOTAL',
+    'STATUS',
+    'DATA',
+    'ID_PEDIDO',
+    'ID_TRANSACAO'
+  ];
+
+  const inventoryMap = new Map<string, InventoryItem>();
+
+  items.forEach(item => {
+    if (!item || (!item.name && !item.MATERIAL)) return;
+    const name = String(item.name || item.MATERIAL).toUpperCase();
+    
+    // Ignora linhas de sistema ou cabeçalhos extras
+    if (SYSTEM_KEYWORDS.some(kw => name.includes(kw))) return;
+    
+    const id = String(item.id || item.ID_MATERIAL || '').trim();
+    if (!id || id.length > 20 || id.includes(':')) return;
+
+    const balanceItabaiana = Number(item.balanceItabaiana ?? item.SALDO_ITABAIANA ?? 0);
+    const balanceDores = Number(item.balanceDores ?? item.SALDO_DORES ?? 0);
+
+    if (inventoryMap.has(id)) {
+      // Se já existe, atualiza apenas se o saldo for maior (ou soma, mas aqui usaremos a última versão válida)
+      const existing = inventoryMap.get(id)!;
+      inventoryMap.set(id, {
+        ...existing,
+        balanceItabaiana: Math.max(existing.balanceItabaiana, balanceItabaiana),
+        balanceDores: Math.max(existing.balanceDores, balanceDores)
+      });
+    } else {
+      inventoryMap.set(id, {
+        id,
+        name,
+        balanceItabaiana,
+        balanceDores
+      });
+    }
+  });
+
+  return Array.from(inventoryMap.values());
+};
+
 const App: React.FC = () => {
   const [inventory, setInventory] = useState<InventoryItem[]>(() => {
     const saved = localStorage.getItem('inventory');
-    return saved ? JSON.parse(saved) : INITIAL_INVENTORY;
+    return saved ? migrateInventory(JSON.parse(saved)) : INITIAL_INVENTORY;
   });
 
   const [requests, setRequests] = useState<MaterialRequest[]>(() => {
@@ -26,6 +77,7 @@ const App: React.FC = () => {
   });
 
   const [isSyncing, setIsSyncing] = useState(false);
+  const [syncError, setSyncError] = useState(false);
   const [lastSync, setLastSync] = useState<number | null>(null);
 
   const fetchFromSheets = useCallback(async () => {
@@ -33,18 +85,23 @@ const App: React.FC = () => {
     if (!urlToUse) return;
 
     setIsSyncing(true);
+    setSyncError(false);
     try {
       const response = await fetch(`${urlToUse}?nocache=${Date.now()}`);
-      if (response.ok) {
-        const cloudData = await response.json();
-        if (Array.isArray(cloudData) && cloudData.length > 0) {
-          setInventory(cloudData);
+      if (!response.ok) throw new Error("Erro na resposta do servidor");
+      
+      const cloudData = await response.json();
+      if (Array.isArray(cloudData) && cloudData.length > 0) {
+        const filtered = migrateInventory(cloudData);
+        if (filtered.length > 0) {
+          setInventory(filtered);
           setLastSync(Date.now());
-          localStorage.setItem('inventory', JSON.stringify(cloudData));
+          localStorage.setItem('inventory', JSON.stringify(filtered));
         }
       }
     } catch (error) {
-      console.warn("Linha Viva: Falha ao carregar dados da nuvem. Usando local.", error);
+      console.error("Erro ao buscar dados da nuvem:", error);
+      setSyncError(true);
     } finally {
       setIsSyncing(false);
     }
@@ -52,36 +109,32 @@ const App: React.FC = () => {
 
   const syncToGoogleSheets = async (payload: any, type: string) => {
     const urlToUse = sheetsUrl || GOOGLE_SHEETS_URL;
-    if (!urlToUse) {
-      console.error("URL da planilha não configurada.");
-      return false;
-    }
+    if (!urlToUse) return false;
 
     setIsSyncing(true);
+    setSyncError(false);
     try {
       const response = await fetch(urlToUse, {
         method: 'POST',
-        mode: 'cors', 
-        headers: {
-          'Content-Type': 'text/plain;charset=utf-8', // Obrigatório para evitar Preflight OPTIONS no Apps Script
-        },
-        body: JSON.stringify({ type, payload })
+        mode: 'cors',
+        redirect: 'follow',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ 
+          type, 
+          payload,
+          app: "Linha Viva",
+          timestamp: new Date().toISOString()
+        })
       });
       
-      const text = await response.text();
-      try {
-        const result = JSON.parse(text);
-        console.log(`Linha Viva: Sync [${type}] - ${result.status}`);
-        return result.status === 'success';
-      } catch (e) {
-        console.log(`Linha Viva: Resposta recebida, mas não é JSON. Verifique a implantação.`);
-        return true; // Muitas vezes o registro ocorre mesmo que o JSON falhe no retorno
-      }
+      if (!response.ok) throw new Error("Falha no POST");
+      return true;
     } catch (error) {
-      console.error(`Linha Viva: Erro crítico na sincronização [${type}]`, error);
+      console.error(`Erro de Sincronização [${type}]:`, error);
+      setSyncError(true);
       return false;
     } finally {
-      setTimeout(() => setIsSyncing(false), 1500);
+      setTimeout(() => setIsSyncing(false), 800);
     }
   };
 
@@ -93,46 +146,25 @@ const App: React.FC = () => {
     localStorage.setItem('requests', JSON.stringify(requests));
   }, [requests]);
 
-  useEffect(() => {
-    localStorage.setItem('sheetsUrl', sheetsUrl);
-  }, [sheetsUrl]);
-
   const addItem = async (item: InventoryItem) => {
     const updatedInv = [item, ...inventory];
     setInventory(updatedInv);
     localStorage.setItem('inventory', JSON.stringify(updatedInv));
-
-    // Primeiro envia o estoque total
     await syncToGoogleSheets(updatedInv, 'ATUALIZAR_ESTOQUE_TOTAL');
-    
-    // Depois registra a movimentação de entrada inicial
-    const logPayload = {
-      ID_TRANSACAO: `CAD-${Date.now()}`,
-      DATA: new Date().toLocaleString('pt-BR'),
-      ID_MATERIAL: item.id,
-      MATERIAL: item.name.toUpperCase(),
-      MOVIMENTACAO: 'ENTRADA',
-      QUANTIDADE: item.balance,
-      OBSERVACAO: `CADASTRO INICIAL`
-    };
-    
-    await syncToGoogleSheets(logPayload, 'MOVIMENTACAO_ESTOQUE');
   };
 
   const addTransaction = async (transaction: Omit<Transaction, 'id' | 'timestamp'>) => {
     const item = inventory.find(i => i.id === transaction.itemId);
-    const itemName = item ? item.name : 'MATERIAL DESCONHECIDO';
-
-    const fullTx: Transaction = {
-      ...transaction,
-      id: `TX-${Date.now()}`,
-      timestamp: Date.now(),
-    };
+    if (!item) return;
 
     const updatedInv = inventory.map(i => {
       if (i.id === transaction.itemId) {
         const delta = transaction.type === 'in' ? transaction.quantity : -transaction.quantity;
-        return { ...i, balance: Math.max(0, i.balance + delta) };
+        return {
+          ...i,
+          balanceItabaiana: transaction.region === 'ITABAIANA' ? Math.max(0, i.balanceItabaiana + delta) : i.balanceItabaiana,
+          balanceDores: transaction.region === 'DORES' ? Math.max(0, i.balanceDores + delta) : i.balanceDores
+        };
       }
       return i;
     });
@@ -140,19 +172,17 @@ const App: React.FC = () => {
     setInventory(updatedInv);
     localStorage.setItem('inventory', JSON.stringify(updatedInv));
 
-    // 1. Log da Movimentação (Mais importante para rastro)
-    const logPayload = {
-      ID_TRANSACAO: fullTx.id,
-      DATA: new Date(fullTx.timestamp).toLocaleString('pt-BR'),
-      ID_MATERIAL: fullTx.itemId,
-      MATERIAL: itemName.toUpperCase(),
-      MOVIMENTACAO: fullTx.type === 'in' ? 'ENTRADA' : 'SAÍDA',
-      QUANTIDADE: fullTx.quantity,
-      OBSERVACAO: (fullTx.description || 'MOVIMENTAÇÃO MANUAL').toUpperCase()
-    };
-    await syncToGoogleSheets(logPayload, 'MOVIMENTACAO_ESTOQUE');
+    await syncToGoogleSheets({
+      ID_TRANSACAO: `TX-${Date.now()}`,
+      DATA: new Date().toLocaleString('pt-BR'),
+      ID_MATERIAL: transaction.itemId,
+      MATERIAL: item.name.toUpperCase(),
+      MOVIMENTACAO: `${transaction.type === 'in' ? 'ENTRADA' : 'SAÍDA'} (${transaction.region})`,
+      QUANTIDADE: transaction.quantity,
+      OBSERVACAO: transaction.description.toUpperCase(),
+      SALDO_FINAL: transaction.region === 'ITABAIANA' ? updatedInv.find(i => i.id === item.id)?.balanceItabaiana : updatedInv.find(i => i.id === item.id)?.balanceDores
+    }, 'MOVIMENTACAO_ESTOQUE');
 
-    // 2. Atualiza Saldo na aba Estoque
     await syncToGoogleSheets(updatedInv, 'ATUALIZAR_ESTOQUE_TOTAL');
   };
 
@@ -166,16 +196,15 @@ const App: React.FC = () => {
     
     setRequests(prev => [newRequest, ...prev]);
     
-    const requestPayload = {
+    await syncToGoogleSheets({
       ID_PEDIDO: newRequest.id,
       DATA: new Date(newRequest.timestamp).toLocaleString('pt-BR'),
       VTR: newRequest.vtr,
+      REGIAO: newRequest.region.toUpperCase(),
       SOLICITANTE: newRequest.requesterName.toUpperCase(),
       ITENS: newRequest.items.map(i => `${i.itemName} (${i.quantity})`).join(' | '),
       STATUS: 'PENDENTE'
-    };
-
-    await syncToGoogleSheets(requestPayload, 'NOVA_SOLICITACAO');
+    }, 'NOVA_SOLICITACAO');
   };
 
   const updateRequestStatus = async (id: string, status: 'pending' | 'served') => {
@@ -183,30 +212,32 @@ const App: React.FC = () => {
     if (!request || request.status === status) return;
 
     let updatedInv = [...inventory];
+    const logs = [];
 
     if (status === 'served') {
-      setIsSyncing(true);
+      const regionKey = request.region === 'ITABAIANA' ? 'balanceItabaiana' : 'balanceDores';
       
-      // Itera sobre os itens do pedido e registra as movimentações e atualiza o saldo
       for (const reqItem of request.items) {
         updatedInv = updatedInv.map(invItem => {
           if (invItem.id === reqItem.itemId) {
-            return { ...invItem, balance: Math.max(0, invItem.balance - reqItem.quantity) };
+            return { ...invItem, [regionKey]: Math.max(0, invItem[regionKey] - reqItem.quantity) };
           }
           return invItem;
         });
 
-        const logPayload = {
+        logs.push({
           ID_TRANSACAO: `PED-${request.vtr}-${Date.now()}`,
           DATA: new Date().toLocaleString('pt-BR'),
           ID_MATERIAL: reqItem.itemId,
           MATERIAL: reqItem.itemName.toUpperCase(),
-          MOVIMENTACAO: 'SAÍDA',
+          MOVIMENTACAO: `SAÍDA (${request.region})`,
           QUANTIDADE: reqItem.quantity,
           OBSERVACAO: `ATENDIMENTO VTR ${request.vtr} - ${request.requesterName.toUpperCase()}`
-        };
-        
-        await syncToGoogleSheets(logPayload, 'MOVIMENTACAO_ESTOQUE');
+        });
+      }
+
+      for (const log of logs) {
+        await syncToGoogleSheets(log, 'MOVIMENTACAO_ESTOQUE');
       }
       
       setInventory(updatedInv);
@@ -214,7 +245,6 @@ const App: React.FC = () => {
       await syncToGoogleSheets(updatedInv, 'ATUALIZAR_ESTOQUE_TOTAL');
     }
 
-    // Atualiza o status na planilha
     setRequests(prev => prev.map(req => req.id === id ? { ...req, status } : req));
     await syncToGoogleSheets({ 
       ID_PEDIDO: id, 
@@ -230,49 +260,31 @@ const App: React.FC = () => {
             <BucketTruckIcon className="w-10 h-10 text-white group-hover:text-[#FF8C00] transition-colors" />
             <div>
               <h1 className="text-xl font-bold tracking-tight">Linha Viva</h1>
-              <p className="text-[10px] uppercase tracking-widest opacity-80">Itabaiana</p>
+              <p className="text-[10px] uppercase tracking-widest opacity-80">Gestão Regional</p>
             </div>
           </Link>
           <div className="flex items-center gap-4">
             {isSyncing && (
               <div className="flex items-center gap-2 text-[10px] bg-orange-500/20 text-orange-200 px-4 py-2 rounded-full border border-orange-500/30 font-black animate-pulse">
                 <span className="w-2 h-2 bg-orange-400 rounded-full animate-ping"></span>
-                SINCRONIZANDO...
+                {syncError ? 'ERRO DE SYNC' : 'SINCRONIZANDO...'}
               </div>
+            )}
+            {syncError && !isSyncing && (
+              <button onClick={fetchFromSheets} className="bg-red-500 text-white text-[9px] px-3 py-1 rounded-full font-bold animate-pulse">Falha na Nuvem - Tentar de novo</button>
             )}
           </div>
         </header>
-
         <main className="flex-1 overflow-y-auto">
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/admin/login" element={<AdminLogin />} />
-            <Route 
-              path="/admin/dashboard" 
-              element={
-                <AdminDashboard 
-                  inventory={inventory} 
-                  requests={requests} 
-                  addTransaction={addTransaction}
-                  addItem={addItem}
-                  updateRequestStatus={updateRequestStatus}
-                  setInventory={setInventory}
-                  sheetsUrl={sheetsUrl}
-                  setSheetsUrl={setSheetsUrl}
-                  fetchFromSheets={fetchFromSheets}
-                  lastSync={lastSync}
-                />
-              } 
-            />
-            <Route 
-              path="/request" 
-              element={<RequestForm inventory={inventory} addRequest={addRequest} isSyncing={isSyncing} />} 
-            />
+            <Route path="/admin/dashboard" element={<AdminDashboard inventory={inventory} requests={requests} addTransaction={addTransaction} addItem={addItem} updateRequestStatus={updateRequestStatus} setInventory={setInventory} sheetsUrl={sheetsUrl} setSheetsUrl={setSheetsUrl} fetchFromSheets={fetchFromSheets} lastSync={lastSync} />} />
+            <Route path="/request" element={<RequestForm inventory={inventory} addRequest={addRequest} isSyncing={isSyncing} />} />
           </Routes>
         </main>
-
         <footer className="bg-white text-gray-400 text-[10px] p-3 text-center border-t">
-          &copy; {new Date().getFullYear()} Linha Viva Itabaiana - Gestão de Materiais
+          &copy; {new Date().getFullYear()} Linha Viva - Gestão Multi-Depósito
         </footer>
       </div>
     </HashRouter>
