@@ -26,6 +26,7 @@ const AdminDashboard: React.FC<Props> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showMovementModal, setShowMovementModal] = useState(false);
+  const [showSyncSuccess, setShowSyncSuccess] = useState(false);
   const [newItem, setNewItem] = useState({ id: '', name: '', balanceItabaiana: 0, balanceDores: 0 });
   const [movement, setMovement] = useState({ itemId: '', quantity: 1, type: 'in' as 'in' | 'out', region: 'ITABAIANA' as 'ITABAIANA' | 'DORES', description: '' });
 
@@ -38,6 +39,14 @@ const AdminDashboard: React.FC<Props> = ({
       item.name.toLowerCase().includes(searchTerm.toLowerCase()) || item.id.includes(searchTerm)
     );
   }, [inventory, searchTerm]);
+
+  const handleManualSync = async () => {
+    if (fetchFromSheets) {
+      await fetchFromSheets();
+      setShowSyncSuccess(true);
+      setTimeout(() => setShowSyncSuccess(false), 3000);
+    }
+  };
 
   const handleAddStockItem = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,6 +73,12 @@ const AdminDashboard: React.FC<Props> = ({
   return (
     <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-6 animate-fade-in pb-20">
       
+      {showSyncSuccess && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[200] bg-green-500 text-white px-6 py-3 rounded-full font-black text-xs shadow-2xl animate-fade-in-up uppercase">
+          Planilha Atualizada com Sucesso!
+        </div>
+      )}
+
       {/* Modal: Novo Material */}
       {showAddModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#003366]/80 backdrop-blur-sm">
@@ -152,7 +167,7 @@ const AdminDashboard: React.FC<Props> = ({
           </div>
         </div>
         <div className="flex gap-2 w-full md:w-auto">
-          {fetchFromSheets && <button onClick={fetchFromSheets} className="flex-1 md:px-6 py-3 bg-[#003366] text-white rounded-xl font-black text-[10px] uppercase shadow-md hover:bg-blue-900 transition-colors">Sincronizar Agora</button>}
+          <button onClick={handleManualSync} className="flex-1 md:px-6 py-3 bg-[#003366] text-white rounded-xl font-black text-[10px] uppercase shadow-md hover:bg-blue-900 transition-colors">Sincronizar Agora</button>
           <button onClick={() => { sessionStorage.removeItem('isAdmin'); navigate('/'); }} className="flex-1 md:px-6 py-3 bg-slate-100 text-slate-400 rounded-xl font-black text-[10px] uppercase hover:bg-slate-200 transition-colors">Sair</button>
         </div>
       </div>
