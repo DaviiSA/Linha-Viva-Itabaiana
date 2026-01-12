@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { HashRouter, Routes, Route, Link } from 'react-router-dom';
 import { BucketTruckIcon } from './components/Icons';
 import { INITIAL_INVENTORY, GOOGLE_SHEETS_URL } from './constants';
@@ -30,7 +30,6 @@ const migrateInventory = (items: any[]): InventoryItem[] => {
     if (!item || (!item.name && !item.MATERIAL)) return;
     const name = String(item.name || item.MATERIAL).toUpperCase();
     
-    // Ignora linhas de sistema ou cabeçalhos extras
     if (SYSTEM_KEYWORDS.some(kw => name.includes(kw))) return;
     
     const id = String(item.id || item.ID_MATERIAL || '').trim();
@@ -40,7 +39,6 @@ const migrateInventory = (items: any[]): InventoryItem[] => {
     const balanceDores = Number(item.balanceDores ?? item.SALDO_DORES ?? 0);
 
     if (inventoryMap.has(id)) {
-      // Se já existe, atualiza apenas se o saldo for maior (ou soma, mas aqui usaremos a última versão válida)
       const existing = inventoryMap.get(id)!;
       inventoryMap.set(id, {
         ...existing,
@@ -79,13 +77,20 @@ const App: React.FC = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncError, setSyncError] = useState(false);
   const [lastSync, setLastSync] = useState<number | null>(null);
+  
+  // Ref para controlar se já existe uma busca em andamento
+  const isFetchingRef = useRef(false);
 
   const fetchFromSheets = useCallback(async () => {
+    if (isFetchingRef.current) return;
+    
     const urlToUse = sheetsUrl || GOOGLE_SHEETS_URL;
     if (!urlToUse) return;
 
+    isFetchingRef.current = true;
     setIsSyncing(true);
     setSyncError(false);
+    
     try {
       const response = await fetch(`${urlToUse}?nocache=${Date.now()}`);
       if (!response.ok) throw new Error("Erro na resposta do servidor");
@@ -104,8 +109,28 @@ const App: React.FC = () => {
       setSyncError(true);
     } finally {
       setIsSyncing(false);
+      isFetchingRef.current = false;
     }
   }, [sheetsUrl]);
+
+  // Polling: Verifica atualizações a cada 30 segundos
+  useEffect(() => {
+    fetchFromSheets(); // Busca inicial
+    const interval = setInterval(fetchFromSheets, 30000);
+    
+    // Atualiza ao voltar para a aba/app
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchFromSheets();
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [fetchFromSheets]);
 
   const syncToGoogleSheets = async (payload: any, type: string) => {
     const urlToUse = sheetsUrl || GOOGLE_SHEETS_URL;
@@ -128,6 +153,9 @@ const App: React.FC = () => {
       });
       
       if (!response.ok) throw new Error("Falha no POST");
+      
+      // Após um POST bem sucedido, forçamos um GET para garantir que local e nuvem estão iguais
+      setTimeout(fetchFromSheets, 1000); 
       return true;
     } catch (error) {
       console.error(`Erro de Sincronização [${type}]:`, error);
@@ -138,18 +166,9 @@ const App: React.FC = () => {
     }
   };
 
-  useEffect(() => {
-    fetchFromSheets();
-  }, [fetchFromSheets]);
-
-  useEffect(() => {
-    localStorage.setItem('requests', JSON.stringify(requests));
-  }, [requests]);
-
   const addItem = async (item: InventoryItem) => {
     const updatedInv = [item, ...inventory];
     setInventory(updatedInv);
-    localStorage.setItem('inventory', JSON.stringify(updatedInv));
     await syncToGoogleSheets(updatedInv, 'ATUALIZAR_ESTOQUE_TOTAL');
   };
 
@@ -157,9 +176,9 @@ const App: React.FC = () => {
     const item = inventory.find(i => i.id === transaction.itemId);
     if (!item) return;
 
+    const delta = transaction.type === 'in' ? transaction.quantity : -transaction.quantity;
     const updatedInv = inventory.map(i => {
       if (i.id === transaction.itemId) {
-        const delta = transaction.type === 'in' ? transaction.quantity : -transaction.quantity;
         return {
           ...i,
           balanceItabaiana: transaction.region === 'ITABAIANA' ? Math.max(0, i.balanceItabaiana + delta) : i.balanceItabaiana,
@@ -170,7 +189,6 @@ const App: React.FC = () => {
     });
 
     setInventory(updatedInv);
-    localStorage.setItem('inventory', JSON.stringify(updatedInv));
 
     await syncToGoogleSheets({
       ID_TRANSACAO: `TX-${Date.now()}`,
@@ -212,8 +230,7 @@ const App: React.FC = () => {
     if (!request || request.status === status) return;
 
     let updatedInv = [...inventory];
-    const logs = [];
-
+    
     if (status === 'served') {
       const regionKey = request.region === 'ITABAIANA' ? 'balanceItabaiana' : 'balanceDores';
       
@@ -225,7 +242,7 @@ const App: React.FC = () => {
           return invItem;
         });
 
-        logs.push({
+        const log = {
           ID_TRANSACAO: `PED-${request.vtr}-${Date.now()}`,
           DATA: new Date().toLocaleString('pt-BR'),
           ID_MATERIAL: reqItem.itemId,
@@ -233,15 +250,11 @@ const App: React.FC = () => {
           MOVIMENTACAO: `SAÍDA (${request.region})`,
           QUANTIDADE: reqItem.quantity,
           OBSERVACAO: `ATENDIMENTO VTR ${request.vtr} - ${request.requesterName.toUpperCase()}`
-        });
-      }
-
-      for (const log of logs) {
+        };
         await syncToGoogleSheets(log, 'MOVIMENTACAO_ESTOQUE');
       }
       
       setInventory(updatedInv);
-      localStorage.setItem('inventory', JSON.stringify(updatedInv));
       await syncToGoogleSheets(updatedInv, 'ATUALIZAR_ESTOQUE_TOTAL');
     }
 
@@ -260,18 +273,22 @@ const App: React.FC = () => {
             <BucketTruckIcon className="w-10 h-10 text-white group-hover:text-[#FF8C00] transition-colors" />
             <div>
               <h1 className="text-xl font-bold tracking-tight">Linha Viva</h1>
-              <p className="text-[10px] uppercase tracking-widest opacity-80">Gestão Regional</p>
+              <p className="text-[10px] uppercase tracking-widest opacity-80">Sincronizado</p>
             </div>
           </Link>
           <div className="flex items-center gap-4">
-            {isSyncing && (
-              <div className="flex items-center gap-2 text-[10px] bg-orange-500/20 text-orange-200 px-4 py-2 rounded-full border border-orange-500/30 font-black animate-pulse">
-                <span className="w-2 h-2 bg-orange-400 rounded-full animate-ping"></span>
-                {syncError ? 'ERRO DE SYNC' : 'SINCRONIZANDO...'}
+            {isSyncing ? (
+              <div className="flex items-center gap-2 text-[10px] bg-[#FF8C00]/20 text-[#FF8C00] px-4 py-2 rounded-full border border-[#FF8C00]/30 font-black animate-pulse">
+                <span className="w-2 h-2 bg-[#FF8C00] rounded-full animate-ping"></span>
+                SYNC
+              </div>
+            ) : (
+              <div className="text-[9px] text-white/40 font-black uppercase tracking-tighter">
+                Online {lastSync ? `• ${new Date(lastSync).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}` : ''}
               </div>
             )}
-            {syncError && !isSyncing && (
-              <button onClick={fetchFromSheets} className="bg-red-500 text-white text-[9px] px-3 py-1 rounded-full font-bold animate-pulse">Falha na Nuvem - Tentar de novo</button>
+            {syncError && (
+              <button onClick={fetchFromSheets} className="bg-red-500 text-white text-[9px] px-3 py-1 rounded-full font-bold">Offline</button>
             )}
           </div>
         </header>
@@ -284,7 +301,7 @@ const App: React.FC = () => {
           </Routes>
         </main>
         <footer className="bg-white text-gray-400 text-[10px] p-3 text-center border-t">
-          &copy; {new Date().getFullYear()} Linha Viva - Gestão Multi-Depósito
+          &copy; {new Date().getFullYear()} Linha Viva - Gestão Regional Tempo Real
         </footer>
       </div>
     </HashRouter>
