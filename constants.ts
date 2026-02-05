@@ -5,8 +5,8 @@ export const COLORS = {
   accent: '#FFFFFF', // White
 };
 
-// URL fornecida pelo usuário para a nova implantação do Google Apps Script
-export const GOOGLE_SHEETS_URL = "https://script.google.com/macros/s/AKfycbySWGKI-5tojenHKo8iTYdo5lyr4V1sPcWUsIheCVr6O0zSRvNEul-h6cBCsh37pm1h/exec";
+// URL da nova implantação do Google Apps Script fornecida pelo usuário
+export const GOOGLE_SHEETS_URL = "https://script.google.com/macros/s/AKfycbzB9TeqSUd41R3R9XMAOyDoUr5eB0_leW-wYc56Q29xUR3af7YCeinJ45I_CIN4DJDu/exec";
 
 // Nível crítico de estoque definido pelo usuário
 export const CRITICAL_THRESHOLD = 6;
