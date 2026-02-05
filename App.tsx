@@ -20,35 +20,35 @@ const migrateInventory = (items: any[]): InventoryItem[] => {
       balanceItabaiana: Number(item.SALDO_ITABAIANA ?? item.balanceItabaiana ?? 0),
       balanceDores: Number(item.SALDO_DORES ?? item.balanceDores ?? 0)
     }))
-    .filter(item => item.id !== "" && !item.name.includes("STATUS"));
+    .filter(item => item.id !== "" && !item.name.includes("STATUS") && !item.name.includes("DATA"));
 };
 
 // Converte dados crus da planilha para o Formato de Pedidos do App
 const migrateRequests = (items: any[]): MaterialRequest[] => {
   if (!Array.isArray(items)) return [];
   return items.map(item => {
-    // Tenta processar os itens que vem como string "Item (Qtd) | Item (Qtd)"
+    if (!item || (!item.ID_PEDIDO && !item.id)) return null;
+
     const itemsRaw = String(item.ITENS || '');
     const parsedItems = itemsRaw.split(' | ').filter(s => s).map(s => {
       const match = s.match(/(.+) \((\d+)\)/);
       return {
         itemId: 'cloud',
-        itemName: match ? match[1] : s,
+        itemName: match ? match[1].trim() : s.trim(),
         quantity: match ? parseInt(match[2]) : 1
       };
     });
 
     return {
-      id: String(item.ID_PEDIDO || ''),
+      id: String(item.ID_PEDIDO || item.id || ''),
       vtr: String(item.VTR || ''),
-      region: String(item.REGIAO || 'ITABAIANA'),
-      requesterName: String(item.SOLICITANTE || ''),
-      // Fix: Explicitly cast the status value to match the MaterialRequest interface
-      status: (String(item.STATUS).toLowerCase().includes('atendido') ? 'served' : 'pending') as 'served' | 'pending',
+      region: String(item.REGIAO || 'ITABAIANA').toUpperCase(),
+      requesterName: String(item.SOLICITANTE || 'N/A').toUpperCase(),
+      status: (String(item.STATUS || '').toLowerCase().includes('atendido') ? 'served' : 'pending') as 'served' | 'pending',
       timestamp: item.DATA ? new Date(item.DATA).getTime() : Date.now(),
       items: parsedItems
     } as MaterialRequest;
-  }).filter(r => r.id);
+  }).filter((r): r is MaterialRequest => r !== null && r.id !== "");
 };
 
 const App: React.FC = () => {
@@ -58,12 +58,7 @@ const App: React.FC = () => {
   });
 
   const [requests, setRequests] = useState<MaterialRequest[]>([]);
-
-  const [sheetsUrl, setSheetsUrl] = useState<string>(() => {
-    const saved = localStorage.getItem('sheetsUrl');
-    return saved || GOOGLE_SHEETS_URL;
-  });
-
+  const [sheetsUrl, setSheetsUrl] = useState<string>(() => localStorage.getItem('sheetsUrl') || GOOGLE_SHEETS_URL);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncError, setSyncError] = useState(false);
   const [lastSync, setLastSync] = useState<number | null>(null);
@@ -77,28 +72,35 @@ const App: React.FC = () => {
 
     isFetchingRef.current = true;
     setIsSyncing(true);
-    setSyncError(false);
     
     try {
-      // Busca Estoque
-      const invRes = await fetch(`${urlToUse}?action=read&t=${Date.now()}`);
+      // 1. Busca Estoque
+      const invRes = await fetch(`${urlToUse}?action=read&t=${Date.now()}`, { cache: 'no-store' });
       if (invRes.ok) {
         const cloudInv = await invRes.json();
         const filteredInv = migrateInventory(cloudInv);
-        setInventory(filteredInv);
-        localStorage.setItem('inventory', JSON.stringify(filteredInv));
+        if (filteredInv.length > 0) {
+          setInventory(filteredInv);
+          localStorage.setItem('inventory', JSON.stringify(filteredInv));
+        }
+      } else {
+        console.error("Erro ao ler estoque: Status", invRes.status);
       }
 
-      // Busca Pedidos (Isso permite que qualquer um veja os pedidos de todos)
-      const reqRes = await fetch(`${urlToUse}?action=read_requests&t=${Date.now()}`);
+      // 2. Busca Pedidos
+      const reqRes = await fetch(`${urlToUse}?action=read_requests&t=${Date.now()}`, { cache: 'no-store' });
       if (reqRes.ok) {
         const cloudReq = await reqRes.json();
-        setRequests(migrateRequests(cloudReq));
+        const filteredReq = migrateRequests(cloudReq);
+        setRequests(filteredReq);
+      } else {
+        console.warn("Erro ao ler pedidos ou ação 'read_requests' não existe no script.");
       }
 
       setLastSync(Date.now());
+      setSyncError(false);
     } catch (error) {
-      console.error("Falha ao ler dados da nuvem:", error);
+      console.error("Falha crítica na sincronização:", error);
       setSyncError(true);
     } finally {
       setIsSyncing(false);
@@ -108,7 +110,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     fetchFromSheets();
-    const interval = setInterval(fetchFromSheets, 45000); // Sincroniza a cada 45s
+    const interval = setInterval(fetchFromSheets, 60000); // 1 minuto
     return () => clearInterval(interval);
   }, [fetchFromSheets]);
 
@@ -118,17 +120,19 @@ const App: React.FC = () => {
 
     setIsSyncing(true);
     try {
+      // Usamos text/plain para evitar o Preflight CORS (OPTIONS)
       await fetch(urlToUse, {
         method: 'POST',
         mode: 'no-cors',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify({ type, payload, timestamp: new Date().toISOString() })
       });
-      // Delay curto para o Google processar e então recarrega tudo
-      setTimeout(fetchFromSheets, 2500);
+      
+      // Como mode 'no-cors' não permite ler a resposta, aguardamos e forçamos refresh
+      setTimeout(fetchFromSheets, 3000);
       return true;
     } catch (error) {
-      console.error(`Erro no envio ${type}:`, error);
+      console.error(`Erro ao enviar ${type}:`, error);
       setSyncError(true);
       return false;
     } finally {
@@ -251,15 +255,15 @@ const App: React.FC = () => {
             <div>
               <h1 className="text-xl font-bold tracking-tight">Linha Viva</h1>
               <p className="text-[10px] uppercase tracking-widest opacity-80">
-                {syncError ? 'Erro de Sincronia' : (isSyncing ? 'Atualizando...' : 'Online')}
+                {syncError ? 'Erro de Conexão' : (isSyncing ? 'Sincronizando...' : 'Online')}
               </p>
             </div>
           </Link>
           <div className="flex items-center gap-4">
-            <div className={`w-2 h-2 rounded-full ${syncError ? 'bg-red-500 animate-pulse' : 'bg-green-500'}`}></div>
+            <div className={`w-2 h-2 rounded-full ${syncError ? 'bg-red-500 animate-pulse' : 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]'}`}></div>
           </div>
         </header>
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 overflow-y-auto smooth-scroll">
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/admin/login" element={<AdminLogin />} />
@@ -268,7 +272,7 @@ const App: React.FC = () => {
           </Routes>
         </main>
         <footer className="bg-white text-gray-400 text-[10px] p-3 text-center border-t">
-          {lastSync ? `Última atualização: ${new Date(lastSync).toLocaleTimeString()}` : 'Buscando dados na nuvem...'}
+          {lastSync ? `Atualizado em: ${new Date(lastSync).toLocaleTimeString()}` : 'Tentando conectar à nuvem...'}
         </footer>
       </div>
     </HashRouter>
