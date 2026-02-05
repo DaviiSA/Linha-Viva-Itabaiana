@@ -9,10 +9,9 @@ import AdminDashboard from './screens/AdminDashboard';
 import RequestForm from './screens/RequestForm';
 import AdminLogin from './screens/AdminLogin';
 
-// Converte dados crus da planilha para o App
+// Converte dados crus da planilha para o Formato de Inventário do App
 const migrateInventory = (items: any[]): InventoryItem[] => {
   if (!Array.isArray(items)) return [];
-
   return items
     .filter(item => item && (item.ID_MATERIAL || item.id))
     .map(item => ({
@@ -21,7 +20,35 @@ const migrateInventory = (items: any[]): InventoryItem[] => {
       balanceItabaiana: Number(item.SALDO_ITABAIANA ?? item.balanceItabaiana ?? 0),
       balanceDores: Number(item.SALDO_DORES ?? item.balanceDores ?? 0)
     }))
-    .filter(item => item.id !== "" && !item.name.includes("STATUS") && !item.name.includes("DATA"));
+    .filter(item => item.id !== "" && !item.name.includes("STATUS"));
+};
+
+// Converte dados crus da planilha para o Formato de Pedidos do App
+const migrateRequests = (items: any[]): MaterialRequest[] => {
+  if (!Array.isArray(items)) return [];
+  return items.map(item => {
+    // Tenta processar os itens que vem como string "Item (Qtd) | Item (Qtd)"
+    const itemsRaw = String(item.ITENS || '');
+    const parsedItems = itemsRaw.split(' | ').filter(s => s).map(s => {
+      const match = s.match(/(.+) \((\d+)\)/);
+      return {
+        itemId: 'cloud',
+        itemName: match ? match[1] : s,
+        quantity: match ? parseInt(match[2]) : 1
+      };
+    });
+
+    return {
+      id: String(item.ID_PEDIDO || ''),
+      vtr: String(item.VTR || ''),
+      region: String(item.REGIAO || 'ITABAIANA'),
+      requesterName: String(item.SOLICITANTE || ''),
+      // Fix: Explicitly cast the status value to match the MaterialRequest interface
+      status: (String(item.STATUS).toLowerCase().includes('atendido') ? 'served' : 'pending') as 'served' | 'pending',
+      timestamp: item.DATA ? new Date(item.DATA).getTime() : Date.now(),
+      items: parsedItems
+    } as MaterialRequest;
+  }).filter(r => r.id);
 };
 
 const App: React.FC = () => {
@@ -30,10 +57,7 @@ const App: React.FC = () => {
     return saved ? migrateInventory(JSON.parse(saved)) : INITIAL_INVENTORY;
   });
 
-  const [requests, setRequests] = useState<MaterialRequest[]>(() => {
-    const saved = localStorage.getItem('requests');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [requests, setRequests] = useState<MaterialRequest[]>([]);
 
   const [sheetsUrl, setSheetsUrl] = useState<string>(() => {
     const saved = localStorage.getItem('sheetsUrl');
@@ -45,6 +69,7 @@ const App: React.FC = () => {
   const [lastSync, setLastSync] = useState<number | null>(null);
   const isFetchingRef = useRef(false);
 
+  // BUSCA GLOBAL: Estoque e Pedidos
   const fetchFromSheets = useCallback(async () => {
     if (isFetchingRef.current) return;
     const urlToUse = sheetsUrl || GOOGLE_SHEETS_URL;
@@ -55,18 +80,25 @@ const App: React.FC = () => {
     setSyncError(false);
     
     try {
-      const response = await fetch(`${urlToUse}?action=read&t=${Date.now()}`);
-      if (!response.ok) throw new Error("Erro de conexão");
-      
-      const cloudData = await response.json();
-      if (Array.isArray(cloudData)) {
-        const filtered = migrateInventory(cloudData);
-        setInventory(filtered);
-        setLastSync(Date.now());
-        localStorage.setItem('inventory', JSON.stringify(filtered));
+      // Busca Estoque
+      const invRes = await fetch(`${urlToUse}?action=read&t=${Date.now()}`);
+      if (invRes.ok) {
+        const cloudInv = await invRes.json();
+        const filteredInv = migrateInventory(cloudInv);
+        setInventory(filteredInv);
+        localStorage.setItem('inventory', JSON.stringify(filteredInv));
       }
+
+      // Busca Pedidos (Isso permite que qualquer um veja os pedidos de todos)
+      const reqRes = await fetch(`${urlToUse}?action=read_requests&t=${Date.now()}`);
+      if (reqRes.ok) {
+        const cloudReq = await reqRes.json();
+        setRequests(migrateRequests(cloudReq));
+      }
+
+      setLastSync(Date.now());
     } catch (error) {
-      console.error("Falha ao ler dados:", error);
+      console.error("Falha ao ler dados da nuvem:", error);
       setSyncError(true);
     } finally {
       setIsSyncing(false);
@@ -76,10 +108,8 @@ const App: React.FC = () => {
 
   useEffect(() => {
     fetchFromSheets();
-    const interval = setInterval(fetchFromSheets, 60000); 
-    const handleVisibility = () => { if (document.visibilityState === 'visible') fetchFromSheets(); };
-    document.addEventListener('visibilitychange', handleVisibility);
-    return () => { clearInterval(interval); document.removeEventListener('visibilitychange', handleVisibility); };
+    const interval = setInterval(fetchFromSheets, 45000); // Sincroniza a cada 45s
+    return () => clearInterval(interval);
   }, [fetchFromSheets]);
 
   const syncToGoogleSheets = async (payload: any, type: string) => {
@@ -88,23 +118,13 @@ const App: React.FC = () => {
 
     setIsSyncing(true);
     try {
-      // Importante: Usar Content-Type text/plain para evitar o Preflight OPTIONS
-      // O mode 'no-cors' envia o dado mas impede de ler a resposta (o Google processa igual)
-      // Se quiser ler o retorno de sucesso/erro, teria que ser mode: 'cors' com script configurado
       await fetch(urlToUse, {
         method: 'POST',
         mode: 'no-cors',
-        headers: { 
-          'Content-Type': 'text/plain;charset=utf-8' 
-        },
-        body: JSON.stringify({ 
-          type, 
-          payload, 
-          timestamp: new Date().toISOString() 
-        })
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ type, payload, timestamp: new Date().toISOString() })
       });
-
-      // Como o no-cors não permite ler a resposta, aguardamos 2.5s e forçamos o refresh
+      // Delay curto para o Google processar e então recarrega tudo
       setTimeout(fetchFromSheets, 2500);
       return true;
     } catch (error) {
@@ -145,10 +165,8 @@ const App: React.FC = () => {
     });
 
     setInventory(updatedInv);
-
     const targetItem = updatedInv.find(i => i.id === item.id);
     
-    // Log detalhado
     await syncToGoogleSheets({
       DATA: new Date().toLocaleString('pt-BR'),
       ID_MATERIAL: item.id,
@@ -159,7 +177,6 @@ const App: React.FC = () => {
       SALDO_FINAL: transaction.region === 'ITABAIANA' ? targetItem?.balanceItabaiana : targetItem?.balanceDores
     }, 'MOVIMENTACAO_ESTOQUE');
 
-    // Saldo Total
     const cleanPayload = updatedInv.map(i => ({
       ID_MATERIAL: i.id,
       MATERIAL: i.name,
@@ -170,22 +187,15 @@ const App: React.FC = () => {
   };
 
   const addRequest = async (request: Omit<MaterialRequest, 'id' | 'timestamp' | 'status'>) => {
-    const newRequest: MaterialRequest = {
-      ...request,
-      id: Math.random().toString(36).substr(2, 9).toUpperCase(),
-      timestamp: Date.now(),
-      status: 'pending',
-    };
-    
-    setRequests(prev => [newRequest, ...prev]);
+    const requestId = `PED-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
     
     await syncToGoogleSheets({
-      ID_PEDIDO: newRequest.id,
-      DATA: new Date(newRequest.timestamp).toLocaleString('pt-BR'),
-      VTR: newRequest.vtr,
-      REGIAO: newRequest.region.toUpperCase(),
-      SOLICITANTE: newRequest.requesterName.toUpperCase(),
-      ITENS: newRequest.items.map(i => `${i.itemName} (${i.quantity})`).join(' | '),
+      ID_PEDIDO: requestId,
+      DATA: new Date().toLocaleString('pt-BR'),
+      VTR: request.vtr,
+      REGIAO: request.region.toUpperCase(),
+      SOLICITANTE: request.requesterName.toUpperCase(),
+      ITENS: request.items.map(i => `${i.itemName} (${i.quantity})`).join(' | '),
       STATUS: 'PENDENTE'
     }, 'NOVA_SOLICITACAO');
   };
@@ -200,7 +210,7 @@ const App: React.FC = () => {
       
       for (const reqItem of request.items) {
         currentInv = currentInv.map(invItem => {
-          if (invItem.id === reqItem.itemId) {
+          if (invItem.name === reqItem.itemName || invItem.id === reqItem.itemId) {
             return { ...invItem, [regionKey]: Math.max(0, invItem[regionKey] - reqItem.quantity) };
           }
           return invItem;
@@ -226,7 +236,6 @@ const App: React.FC = () => {
       await syncToGoogleSheets(cleanPayload, 'ATUALIZAR_ESTOQUE_TOTAL');
     }
 
-    setRequests(prev => prev.map(req => req.id === id ? { ...req, status } : req));
     await syncToGoogleSheets({ 
       ID_PEDIDO: id, 
       STATUS: status === 'served' ? 'ATENDIDO' : 'PENDENTE' 
@@ -242,17 +251,12 @@ const App: React.FC = () => {
             <div>
               <h1 className="text-xl font-bold tracking-tight">Linha Viva</h1>
               <p className="text-[10px] uppercase tracking-widest opacity-80">
-                {syncError ? 'Atenção: Erro de Nuvem' : 'Sincronizado'}
+                {syncError ? 'Erro de Sincronia' : (isSyncing ? 'Atualizando...' : 'Online')}
               </p>
             </div>
           </Link>
           <div className="flex items-center gap-4">
-            {isSyncing && (
-              <div className="bg-[#FF8C00] text-white text-[9px] px-3 py-1 rounded-full font-black animate-pulse">
-                GRAVANDO...
-              </div>
-            )}
-            <div className={`w-2 h-2 rounded-full ${syncError ? 'bg-red-500' : 'bg-green-500'}`}></div>
+            <div className={`w-2 h-2 rounded-full ${syncError ? 'bg-red-500 animate-pulse' : 'bg-green-500'}`}></div>
           </div>
         </header>
         <main className="flex-1 overflow-y-auto">
@@ -264,7 +268,7 @@ const App: React.FC = () => {
           </Routes>
         </main>
         <footer className="bg-white text-gray-400 text-[10px] p-3 text-center border-t">
-          {lastSync ? `Sincronizado em: ${new Date(lastSync).toLocaleTimeString()}` : 'Verificando conexão...'}
+          {lastSync ? `Última atualização: ${new Date(lastSync).toLocaleTimeString()}` : 'Buscando dados na nuvem...'}
         </footer>
       </div>
     </HashRouter>
