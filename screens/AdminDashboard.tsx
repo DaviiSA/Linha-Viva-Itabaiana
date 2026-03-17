@@ -15,10 +15,12 @@ interface Props {
   setSheetsUrl: (url: string) => void;
   fetchFromSheets?: () => Promise<void>;
   lastSync?: number | null;
+  syncError?: boolean;
+  errorMsg?: string | null;
 }
 
 const AdminDashboard: React.FC<Props> = ({ 
-  inventory, requests, addTransaction, addItem, updateRequestStatus, sheetsUrl, setSheetsUrl, fetchFromSheets, lastSync
+  inventory, requests, addTransaction, addItem, updateRequestStatus, sheetsUrl, setSheetsUrl, fetchFromSheets, lastSync, syncError, errorMsg
 }) => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'stock' | 'requests' | 'config'>('stock');
@@ -163,7 +165,9 @@ const AdminDashboard: React.FC<Props> = ({
           </div>
           <div>
             <h2 className="text-2xl font-black text-[#003366]">Painel Administrativo</h2>
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{lastSync ? `Sincronizado: ${new Date(lastSync).toLocaleTimeString()}` : 'Sem conexão com a nuvem'}</p>
+            <p className={`text-[10px] font-bold uppercase tracking-widest ${syncError ? 'text-red-500' : 'text-slate-400'}`}>
+              {syncError ? '⚠️ Erro na Sincronização' : (lastSync ? `Sincronizado: ${new Date(lastSync).toLocaleTimeString()}` : 'Sem conexão com a nuvem')}
+            </p>
           </div>
         </div>
         <div className="flex gap-2 w-full md:w-auto">
@@ -296,6 +300,20 @@ const AdminDashboard: React.FC<Props> = ({
       {activeTab === 'config' && (
         <div className="max-w-xl mx-auto bg-white rounded-[2rem] p-10 shadow-sm border border-slate-100 space-y-6 animate-fade-in">
           <h3 className="text-xl font-black text-[#003366] uppercase">Configuração da Nuvem</h3>
+          
+          {syncError && errorMsg && (
+            <div className="p-4 bg-red-50 border-2 border-red-100 rounded-2xl">
+              <p className="text-[10px] font-black text-red-600 uppercase mb-1">Status do Erro:</p>
+              <p className="text-xs font-bold text-red-500 leading-tight">{errorMsg}</p>
+              <div className="mt-3 p-3 bg-white rounded-xl border border-red-50 text-[9px] text-red-400 font-bold uppercase leading-relaxed">
+                Dicas: <br/>
+                1. Verifique se a URL termina em /exec <br/>
+                2. No Google Script, clique em 'Implantar' {'>'} 'Nova Implantação' <br/>
+                3. Selecione 'App da Web' e 'Quem pode acessar: Qualquer pessoa'
+              </div>
+            </div>
+          )}
+
           <div className="space-y-4">
             <label className="text-[10px] font-black text-slate-400 uppercase">Google Script URL</label>
             <input type="text" className="w-full p-4 bg-slate-50 border-2 rounded-xl outline-none font-bold text-[10px] text-slate-600 focus:border-[#003366] transition-colors" value={sheetsUrl} onChange={e => setSheetsUrl(e.target.value)} />

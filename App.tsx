@@ -61,46 +61,87 @@ const App: React.FC = () => {
   const [sheetsUrl, setSheetsUrl] = useState<string>(() => localStorage.getItem('sheetsUrl') || GOOGLE_SHEETS_URL);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncError, setSyncError] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [lastSync, setLastSync] = useState<number | null>(null);
   const isFetchingRef = useRef(false);
 
   // BUSCA GLOBAL: Estoque e Pedidos
   const fetchFromSheets = useCallback(async () => {
     if (isFetchingRef.current) return;
-    const urlToUse = sheetsUrl || GOOGLE_SHEETS_URL;
-    if (!urlToUse) return;
+    
+    let urlToUse = (sheetsUrl || GOOGLE_SHEETS_URL).trim();
+    if (!urlToUse || !urlToUse.startsWith('http')) return;
+
+    // Remove barra final se houver
+    if (urlToUse.endsWith('/')) urlToUse = urlToUse.slice(0, -1);
+
+    if (urlToUse.includes('docs.google.com/spreadsheets')) {
+      const msg = "URL INVÁLIDA: Você usou o link da planilha, não do Script.";
+      console.error(msg);
+      setErrorMsg(msg);
+      setSyncError(true);
+      return;
+    }
 
     isFetchingRef.current = true;
     setIsSyncing(true);
+    setErrorMsg(null);
     
     try {
-      // 1. Busca Estoque
-      const invRes = await fetch(`${urlToUse}?action=read&t=${Date.now()}`, { cache: 'no-store' });
-      if (invRes.ok) {
-        const cloudInv = await invRes.json();
-        const filteredInv = migrateInventory(cloudInv);
-        if (filteredInv.length > 0) {
-          setInventory(filteredInv);
-          localStorage.setItem('inventory', JSON.stringify(filteredInv));
-        }
-      } else {
-        console.error("Erro ao ler estoque: Status", invRes.status);
+      // 1. Busca Estoque (Principal)
+      // Usamos o fetch mais simples possível para evitar problemas de CORS/Preflight
+      const invRes = await fetch(`${urlToUse}?action=read&t=${Date.now()}`);
+      
+      if (!invRes.ok) {
+        throw new Error(`HTTP ${invRes.status}: O script retornou um erro.`);
+      }
+      
+      const cloudInv = await invRes.json();
+      const filteredInv = migrateInventory(cloudInv);
+      
+      if (filteredInv.length > 0) {
+        setInventory(filteredInv);
+        localStorage.setItem('inventory', JSON.stringify(filteredInv));
       }
 
-      // 2. Busca Pedidos
-      const reqRes = await fetch(`${urlToUse}?action=read_requests&t=${Date.now()}`, { cache: 'no-store' });
-      if (reqRes.ok) {
-        const cloudReq = await reqRes.json();
-        const filteredReq = migrateRequests(cloudReq);
-        setRequests(filteredReq);
-      } else {
-        console.warn("Erro ao ler pedidos ou ação 'read_requests' não existe no script.");
+      // 2. Busca Pedidos (Opcional, não quebra se falhar)
+      try {
+        const reqRes = await fetch(`${urlToUse}?action=read_requests&t=${Date.now()}`);
+        if (reqRes.ok) {
+          const cloudReq = await reqRes.json();
+          const filteredReq = migrateRequests(cloudReq);
+          setRequests(filteredReq);
+        }
+      } catch (reqErr) {
+        console.warn("Aviso: Falha ao carregar pedidos (verifique se a função read_requests existe no script).", reqErr);
       }
 
       setLastSync(Date.now());
       setSyncError(false);
+      setErrorMsg(null);
     } catch (error) {
       console.error("Falha crítica na sincronização:", error);
+      
+      let msg = "Erro desconhecido na conexão.";
+      if (error instanceof Error) {
+        if (error.message === 'Failed to fetch') {
+          msg = "Falha na Conexão (CORS/Rede). Verifique se o Script está publicado para 'Qualquer Pessoa'.";
+        } else {
+          msg = error.message;
+        }
+      }
+      setErrorMsg(msg);
+
+      // Recuperação: Tenta carregar do cache local
+      const saved = localStorage.getItem('inventory');
+      if (saved) {
+        try {
+          const cachedInv = migrateInventory(JSON.parse(saved));
+          if (cachedInv.length > 0) setInventory(cachedInv);
+        } catch (e) {
+          console.error("Erro ao ler cache local:", e);
+        }
+      }
       setSyncError(true);
     } finally {
       setIsSyncing(false);
@@ -115,12 +156,13 @@ const App: React.FC = () => {
   }, [fetchFromSheets]);
 
   const syncToGoogleSheets = async (payload: any, type: string) => {
-    const urlToUse = sheetsUrl || GOOGLE_SHEETS_URL;
-    if (!urlToUse) return false;
+    const urlToUse = (sheetsUrl || GOOGLE_SHEETS_URL).trim();
+    if (!urlToUse || !urlToUse.startsWith('http')) return false;
 
     setIsSyncing(true);
     try {
       // Usamos text/plain para evitar o Preflight CORS (OPTIONS)
+      // Google Apps Script aceita POST com no-cors se o corpo for texto
       await fetch(urlToUse, {
         method: 'POST',
         mode: 'no-cors',
@@ -128,15 +170,26 @@ const App: React.FC = () => {
         body: JSON.stringify({ type, payload, timestamp: new Date().toISOString() })
       });
       
-      // Como mode 'no-cors' não permite ler a resposta, aguardamos e forçamos refresh
-      setTimeout(fetchFromSheets, 3000);
+      // Pequeno delay para garantir que o script processou antes de ler de volta
+      await new Promise(resolve => setTimeout(resolve, 2000));
       return true;
     } catch (error) {
       console.error(`Erro ao enviar ${type}:`, error);
+      let msg = `Erro ao enviar ${type}.`;
+      if (error instanceof Error) {
+        if (error.message === 'Failed to fetch') {
+          msg = "Falha no envio (CORS/Rede). O Google Script pode estar bloqueando a requisição.";
+        } else {
+          msg = error.message;
+        }
+      }
+      setErrorMsg(msg);
       setSyncError(true);
       return false;
     } finally {
       setIsSyncing(false);
+      // Forçamos um refresh após qualquer envio
+      fetchFromSheets();
     }
   };
 
@@ -228,6 +281,9 @@ const App: React.FC = () => {
           QUANTIDADE: reqItem.quantity,
           OBSERVACAO: `ATENDIMENTO VTR ${request.vtr} - ${request.requesterName}`
         }, 'MOVIMENTACAO_ESTOQUE');
+        
+        // Pequena pausa para evitar sobrecarga no Google Script
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
       
       setInventory(currentInv);
@@ -267,7 +323,7 @@ const App: React.FC = () => {
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/admin/login" element={<AdminLogin />} />
-            <Route path="/admin/dashboard" element={<AdminDashboard inventory={inventory} requests={requests} addTransaction={addTransaction} addItem={addItem} updateRequestStatus={updateRequestStatus} setInventory={setInventory} sheetsUrl={sheetsUrl} setSheetsUrl={setSheetsUrl} fetchFromSheets={fetchFromSheets} lastSync={lastSync} />} />
+            <Route path="/admin/dashboard" element={<AdminDashboard inventory={inventory} requests={requests} addTransaction={addTransaction} addItem={addItem} updateRequestStatus={updateRequestStatus} setInventory={setInventory} sheetsUrl={sheetsUrl} setSheetsUrl={setSheetsUrl} fetchFromSheets={fetchFromSheets} lastSync={lastSync} syncError={syncError} errorMsg={errorMsg} />} />
             <Route path="/request" element={<RequestForm inventory={inventory} addRequest={addRequest} isSyncing={isSyncing} />} />
           </Routes>
         </main>
