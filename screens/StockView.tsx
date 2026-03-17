@@ -75,8 +75,7 @@ const StockView: React.FC<Props> = ({ inventory, isSyncing, fetchFromSheets, las
             <thead className="bg-slate-50 text-slate-500 text-[10px] uppercase tracking-widest font-black">
               <tr>
                 <th className="px-6 py-4">Material</th>
-                <th className="px-6 py-4 text-center">Itabaiana</th>
-                <th className="px-6 py-4 text-center">Dores</th>
+                <th className="px-6 py-4 text-center">Saldo Disponível</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -93,13 +92,6 @@ const StockView: React.FC<Props> = ({ inventory, isSyncing, fetchFromSheets, las
                       {item.balanceItabaiana}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-center">
-                    <span className={`inline-block px-3 py-1 rounded-full text-xs font-black ${
-                      item.balanceDores <= CRITICAL_THRESHOLD ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'
-                    }`}>
-                      {item.balanceDores}
-                    </span>
-                  </td>
                 </tr>
               ))}
             </tbody>
@@ -110,27 +102,16 @@ const StockView: React.FC<Props> = ({ inventory, isSyncing, fetchFromSheets, las
         <div className="md:hidden divide-y divide-slate-100">
           {filteredInventory.map(item => (
             <div key={item.id} className="p-4 space-y-3">
-              <div>
-                <div className="font-bold text-[#003366] text-sm leading-tight">{item.name}</div>
-                <div className="text-[10px] text-slate-400 font-mono mt-1">ID: {item.id}</div>
-              </div>
-              <div className="flex justify-between items-center pt-2">
-                <div className="flex flex-col items-center gap-1">
-                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Itabaiana</span>
-                  <span className={`px-4 py-1 rounded-full text-xs font-black ${
-                    item.balanceItabaiana <= CRITICAL_THRESHOLD ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'
-                  }`}>
-                    {item.balanceItabaiana}
-                  </span>
+              <div className="flex justify-between items-start">
+                <div>
+                  <div className="font-bold text-[#003366] text-sm leading-tight">{item.name}</div>
+                  <div className="text-[10px] text-slate-400 font-mono mt-1">ID: {item.id}</div>
                 </div>
-                <div className="flex flex-col items-center gap-1">
-                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Dores</span>
-                  <span className={`px-4 py-1 rounded-full text-xs font-black ${
-                    item.balanceDores <= CRITICAL_THRESHOLD ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'
-                  }`}>
-                    {item.balanceDores}
-                  </span>
-                </div>
+                <span className={`px-4 py-1 rounded-full text-xs font-black ${
+                  item.balanceItabaiana <= CRITICAL_THRESHOLD ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'
+                }`}>
+                  {item.balanceItabaiana}
+                </span>
               </div>
             </div>
           ))}

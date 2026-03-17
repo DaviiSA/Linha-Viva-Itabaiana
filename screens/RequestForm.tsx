@@ -15,7 +15,6 @@ interface Props {
 const RequestForm: React.FC<Props> = ({ inventory, addRequest, isSyncing, fetchFromSheets, lastSync }) => {
   const navigate = useNavigate();
   const [vtr, setVtr] = useState('');
-  const [region, setRegion] = useState<'ITABAIANA' | 'DORES'>('ITABAIANA');
   const [requesterName, setRequesterName] = useState('');
   const [selectedItems, setSelectedItems] = useState<RequestedItem[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -33,12 +32,9 @@ const RequestForm: React.FC<Props> = ({ inventory, addRequest, isSyncing, fetchF
   }, []);
 
   const availableItems = useMemo(() => {
-    // Filtro estrito: Apenas itens com saldo > 0 na regional selecionada
-    return inventory.filter(i => {
-      const balance = region === 'ITABAIANA' ? i.balanceItabaiana : i.balanceDores;
-      return balance > 0 && i.name.length > 2;
-    });
-  }, [inventory, region]);
+    // Filtro estrito: Apenas itens com saldo > 0
+    return inventory.filter(i => i.balanceItabaiana > 0 && i.name.length > 2);
+  }, [inventory]);
 
   const filteredOptions = useMemo(() => {
     const search = searchTerm.toLowerCase().trim();
@@ -50,9 +46,9 @@ const RequestForm: React.FC<Props> = ({ inventory, addRequest, isSyncing, fetchF
     const target = item || availableItems.find(i => i.id === currentItem.itemId);
     if (!target) return;
 
-    const currentBalance = region === 'ITABAIANA' ? target.balanceItabaiana : target.balanceDores;
+    const currentBalance = target.balanceItabaiana;
     if (currentItem.quantity > currentBalance) {
-      alert(`Saldo insuficiente em ${region}. Disponível: ${currentBalance}`);
+      alert(`Saldo insuficiente. Disponível: ${currentBalance}`);
       return;
     }
 
@@ -74,7 +70,7 @@ const RequestForm: React.FC<Props> = ({ inventory, addRequest, isSyncing, fetchF
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!vtr || selectedItems.length === 0) return;
-    addRequest({ vtr, region, requesterName: requesterName.toUpperCase() || 'COLABORADOR', items: selectedItems });
+    addRequest({ vtr, region: 'ITABAIANA', requesterName: requesterName.toUpperCase() || 'COLABORADOR', items: selectedItems });
     setIsSuccess(true);
     setTimeout(() => navigate('/'), 2500);
   };
@@ -86,7 +82,7 @@ const RequestForm: React.FC<Props> = ({ inventory, addRequest, isSyncing, fetchF
           <svg xmlns="http://www.w3.org/2000/svg" className="h-20 w-20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
         </div>
         <h2 className="text-3xl font-black text-[#003366]">Pedido Enviado!</h2>
-        <p className="text-slate-400 font-bold uppercase text-[10px] mt-2">Retirada em: {region}</p>
+        <p className="text-slate-400 font-bold uppercase text-[10px] mt-2">Retirada em: ITABAIANA</p>
       </div>
     );
   }
@@ -128,14 +124,6 @@ const RequestForm: React.FC<Props> = ({ inventory, addRequest, isSyncing, fetchF
         <form onSubmit={handleSubmit} className="space-y-6 md:space-y-8">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
             <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Retirar em:</label>
-              <div className="flex bg-slate-100 p-1 rounded-2xl">
-                <button type="button" onClick={() => { setRegion('ITABAIANA'); setSelectedItems([]); }} className={`flex-1 py-3 md:py-4 rounded-xl font-black text-[10px] uppercase transition-all ${region === 'ITABAIANA' ? 'bg-white text-[#003366] shadow-sm' : 'text-slate-400'}`}>Itabaiana</button>
-                <button type="button" onClick={() => { setRegion('DORES'); setSelectedItems([]); }} className={`flex-1 py-3 md:py-4 rounded-xl font-black text-[10px] uppercase transition-all ${region === 'DORES' ? 'bg-white text-[#003366] shadow-sm' : 'text-slate-400'}`}>Dores</button>
-              </div>
-            </div>
-
-            <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">VTR / Viatura</label>
               <select className="w-full p-3.5 md:p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#003366] outline-none font-black text-[#003366] transition-colors" value={vtr} onChange={e => setVtr(e.target.value)} required>
                 <option value="" className="text-slate-400">Selecione...</option>
@@ -143,7 +131,7 @@ const RequestForm: React.FC<Props> = ({ inventory, addRequest, isSyncing, fetchF
               </select>
             </div>
 
-            <div className="md:col-span-2 space-y-2">
+            <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nome do Solicitante</label>
               <input type="text" className="w-full p-3.5 md:p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none font-bold uppercase text-slate-800 placeholder:text-slate-300 focus:border-[#003366] transition-colors" placeholder="Nome Completo" value={requesterName} onChange={e => setRequesterName(e.target.value)} required />
             </div>
@@ -167,7 +155,7 @@ const RequestForm: React.FC<Props> = ({ inventory, addRequest, isSyncing, fetchF
                 {isDropdownOpen && (
                   <div className="absolute z-50 left-0 right-0 mt-2 bg-white border-2 border-slate-200 rounded-2xl shadow-2xl max-h-64 overflow-y-auto overflow-x-hidden animate-scale-up border-orange-100">
                     {filteredOptions.length === 0 ? (
-                      <div className="p-4 text-center text-xs font-bold text-slate-400 uppercase">Nenhum material com saldo em {region}</div>
+                      <div className="p-4 text-center text-xs font-bold text-slate-400 uppercase">Nenhum material com saldo disponível</div>
                     ) : (
                       filteredOptions.map(item => (
                         <button 
@@ -180,7 +168,7 @@ const RequestForm: React.FC<Props> = ({ inventory, addRequest, isSyncing, fetchF
                           <div className="flex justify-between items-center mt-1">
                             <span className="text-[8px] md:text-[9px] text-slate-400 font-mono font-bold tracking-tighter">CÓDIGO: {item.id}</span>
                             <span className="text-[9px] md:text-[10px] font-black text-[#FF8C00] bg-orange-100/50 px-2 py-0.5 rounded-md uppercase">
-                              SALDO {region}: {region === 'ITABAIANA' ? item.balanceItabaiana : item.balanceDores}
+                              SALDO: {item.balanceItabaiana}
                             </span>
                           </div>
                         </button>
@@ -211,7 +199,7 @@ const RequestForm: React.FC<Props> = ({ inventory, addRequest, isSyncing, fetchF
             </div>
 
             <div className="space-y-3 pt-4 border-t border-slate-200">
-              {selectedItems.length > 0 && <h4 className="text-[9px] font-black text-slate-400 uppercase mb-2">Materiais para Retirar em {region}:</h4>}
+              {selectedItems.length > 0 && <h4 className="text-[9px] font-black text-slate-400 uppercase mb-2">Materiais para Retirar:</h4>}
               {selectedItems.map((item, idx) => (
                 <div key={idx} className="flex justify-between items-center bg-white p-3 md:p-4 rounded-2xl border border-slate-100 shadow-sm animate-scale-up">
                   <span className="text-[10px] md:text-xs font-black text-slate-700 uppercase leading-tight max-w-[70%]">{item.itemName}</span>

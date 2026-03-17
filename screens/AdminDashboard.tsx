@@ -24,13 +24,13 @@ const AdminDashboard: React.FC<Props> = ({
 }) => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'stock' | 'requests' | 'config'>('stock');
-  const [selectedRegional, setSelectedRegional] = useState<'ALL' | 'ITABAIANA' | 'DORES'>('ALL');
+  const [selectedRegional, setSelectedRegional] = useState<'ALL' | 'ITABAIANA'>('ALL');
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showMovementModal, setShowMovementModal] = useState(false);
   const [showSyncSuccess, setShowSyncSuccess] = useState(false);
-  const [newItem, setNewItem] = useState({ id: '', name: '', balanceItabaiana: 0, balanceDores: 0 });
-  const [movement, setMovement] = useState({ itemId: '', quantity: 1, type: 'in' as 'in' | 'out', region: 'ITABAIANA' as 'ITABAIANA' | 'DORES', description: '' });
+  const [newItem, setNewItem] = useState({ id: '', name: '', balanceItabaiana: 0 });
+  const [movement, setMovement] = useState({ itemId: '', quantity: 1, type: 'in' as 'in' | 'out', description: '' });
 
   useEffect(() => {
     if (sessionStorage.getItem('isAdmin') !== 'true') navigate('/admin/login');
@@ -55,7 +55,7 @@ const AdminDashboard: React.FC<Props> = ({
     if (!newItem.id.trim() || !newItem.name.trim()) return;
     await addItem({ ...newItem, name: newItem.name.toUpperCase() });
     setShowAddModal(false);
-    setNewItem({ id: '', name: '', balanceItabaiana: 0, balanceDores: 0 });
+    setNewItem({ id: '', name: '', balanceItabaiana: 0 });
   };
 
   const handleMovementSubmit = (e: React.FormEvent) => {
@@ -65,10 +65,10 @@ const AdminDashboard: React.FC<Props> = ({
       itemId: movement.itemId,
       quantity: movement.quantity,
       type: movement.type,
-      region: movement.region,
+      region: 'ITABAIANA',
       description: movement.description || (movement.type === 'in' ? 'Entrada manual' : 'Saída manual')
     });
-    setMovement({ itemId: '', quantity: 1, type: 'in', region: 'ITABAIANA', description: '' });
+    setMovement({ itemId: '', quantity: 1, type: 'in', description: '' });
     setShowMovementModal(false);
   };
 
@@ -89,14 +89,10 @@ const AdminDashboard: React.FC<Props> = ({
             <form onSubmit={handleAddStockItem} className="space-y-4">
               <input type="text" placeholder="Código (ID)" className="w-full p-4 bg-slate-50 border-2 rounded-xl outline-none font-bold text-slate-800 placeholder:text-slate-300" value={newItem.id} onChange={e => setNewItem({...newItem, id: e.target.value})} required />
               <input type="text" placeholder="Descrição do Material" className="w-full p-4 bg-slate-50 border-2 rounded-xl outline-none font-bold uppercase text-slate-800 placeholder:text-slate-300" value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} required />
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4">
                 <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase">Qtd Itabaiana</label>
+                  <label className="text-[10px] font-black text-slate-400 uppercase">Quantidade Inicial</label>
                   <input type="number" className="w-full p-4 bg-slate-50 border-2 rounded-xl font-black text-slate-800" value={newItem.balanceItabaiana} onChange={e => setNewItem({...newItem, balanceItabaiana: Number(e.target.value)})} />
-                </div>
-                <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase">Qtd Dores</label>
-                  <input type="number" className="w-full p-4 bg-slate-50 border-2 rounded-xl font-black text-slate-800" value={newItem.balanceDores} onChange={e => setNewItem({...newItem, balanceDores: Number(e.target.value)})} />
                 </div>
               </div>
               <div className="flex gap-3 pt-4">
@@ -119,14 +115,6 @@ const AdminDashboard: React.FC<Props> = ({
                 <select className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-xl outline-none font-bold text-xs text-slate-800 focus:border-[#FF8C00] transition-colors" value={movement.itemId} onChange={e => setMovement({...movement, itemId: e.target.value})} required>
                   <option value="" className="text-slate-400">Selecione o Material</option>
                   {inventory.map(i => <option key={i.id} value={i.id} className="text-slate-800">{i.name}</option>)}
-                </select>
-              </div>
-
-              <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase ml-1 mb-1 block">Regional</label>
-                <select className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-xl outline-none font-black text-xs text-[#FF8C00] focus:border-[#FF8C00] transition-colors" value={movement.region} onChange={e => setMovement({...movement, region: e.target.value as any})}>
-                  <option value="ITABAIANA">DEPOSITO ITABAIANA</option>
-                  <option value="DORES">DEPOSITO DORES</option>
                 </select>
               </div>
 
@@ -198,12 +186,6 @@ const AdminDashboard: React.FC<Props> = ({
             >
               Itabaiana
             </button>
-            <button 
-              onClick={() => setSelectedRegional('DORES')} 
-              className={`flex-1 py-3 md:py-4 rounded-2xl font-black text-[9px] md:text-[10px] uppercase tracking-wider transition-all shadow-sm ${selectedRegional === 'DORES' ? 'bg-[#FF8C00] text-white' : 'bg-white text-slate-400 border border-slate-100 hover:border-orange-200'}`}
-            >
-              Dores
-            </button>
           </div>
 
           <div className="bg-white rounded-[2rem] md:rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
@@ -230,12 +212,7 @@ const AdminDashboard: React.FC<Props> = ({
                 <thead className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b">
                   <tr>
                     <th className="px-8 py-5">Material</th>
-                    {(selectedRegional === 'ALL' || selectedRegional === 'ITABAIANA') && (
-                      <th className={`px-4 py-5 text-center ${selectedRegional === 'ITABAIANA' ? 'bg-blue-50/50 text-[#003366]' : ''}`}>Itabaiana</th>
-                    )}
-                    {(selectedRegional === 'ALL' || selectedRegional === 'DORES') && (
-                      <th className={`px-4 py-5 text-center ${selectedRegional === 'DORES' ? 'bg-orange-50/50 text-[#FF8C00]' : ''}`}>Dores</th>
-                    )}
+                    <th className="px-4 py-5 text-center">Saldo</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50 font-bold text-slate-700">
@@ -245,16 +222,9 @@ const AdminDashboard: React.FC<Props> = ({
                         <div className="text-xs uppercase leading-tight group-hover:text-[#003366] transition-colors">{item.name}</div>
                         <div className="text-[9px] text-slate-300 font-mono mt-1">ID: {item.id}</div>
                       </td>
-                      {(selectedRegional === 'ALL' || selectedRegional === 'ITABAIANA') && (
-                        <td className={`px-4 py-5 text-center ${selectedRegional === 'ITABAIANA' ? 'bg-blue-50/20' : ''}`}>
-                          <span className={`text-lg font-black ${item.balanceItabaiana <= CRITICAL_THRESHOLD ? 'text-red-500 animate-pulse' : 'text-slate-800'}`}>{item.balanceItabaiana}</span>
-                        </td>
-                      )}
-                      {(selectedRegional === 'ALL' || selectedRegional === 'DORES') && (
-                        <td className={`px-4 py-5 text-center ${selectedRegional === 'DORES' ? 'bg-orange-50/20' : ''}`}>
-                          <span className={`text-lg font-black ${item.balanceDores <= CRITICAL_THRESHOLD ? 'text-red-500 animate-pulse' : 'text-slate-800'}`}>{item.balanceDores}</span>
-                        </td>
-                      )}
+                      <td className="px-4 py-5 text-center">
+                        <span className={`text-lg font-black ${item.balanceItabaiana <= CRITICAL_THRESHOLD ? 'text-red-500 animate-pulse' : 'text-slate-800'}`}>{item.balanceItabaiana}</span>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -270,18 +240,10 @@ const AdminDashboard: React.FC<Props> = ({
                     <div className="text-[9px] text-slate-300 font-mono mt-1">ID: {item.id}</div>
                   </div>
                   <div className="flex justify-between items-center bg-slate-50/50 p-2 rounded-xl">
-                    {(selectedRegional === 'ALL' || selectedRegional === 'ITABAIANA') && (
-                      <div className="flex flex-col items-center flex-1">
-                        <span className="text-[8px] font-black text-slate-400 uppercase">Itabaiana</span>
-                        <span className={`text-sm font-black ${item.balanceItabaiana <= CRITICAL_THRESHOLD ? 'text-red-500' : 'text-slate-800'}`}>{item.balanceItabaiana}</span>
-                      </div>
-                    )}
-                    {(selectedRegional === 'ALL' || selectedRegional === 'DORES') && (
-                      <div className="flex flex-col items-center flex-1 border-l border-slate-100">
-                        <span className="text-[8px] font-black text-slate-400 uppercase">Dores</span>
-                        <span className={`text-sm font-black ${item.balanceDores <= CRITICAL_THRESHOLD ? 'text-red-500' : 'text-slate-800'}`}>{item.balanceDores}</span>
-                      </div>
-                    )}
+                    <div className="flex flex-col items-center flex-1">
+                      <span className="text-[8px] font-black text-slate-400 uppercase">Saldo Atual</span>
+                      <span className={`text-sm font-black ${item.balanceItabaiana <= CRITICAL_THRESHOLD ? 'text-red-500' : 'text-slate-800'}`}>{item.balanceItabaiana}</span>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -302,7 +264,7 @@ const AdminDashboard: React.FC<Props> = ({
             requests.map(req => (
               <div key={req.id} className={`bg-white p-6 rounded-3xl shadow-sm border-2 transition-all ${req.status === 'served' ? 'border-green-100 opacity-60' : 'border-slate-50 hover:border-blue-100'}`}>
                 <div className="flex justify-between items-center mb-4">
-                  <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase text-white shadow-sm ${req.region === 'ITABAIANA' ? 'bg-[#003366]' : 'bg-[#FF8C00]'}`}>{req.region}</span>
+                  <span className="px-3 py-1 rounded-lg text-[9px] font-black uppercase text-white shadow-sm bg-[#003366]">ITABAIANA</span>
                   <span className="text-[9px] font-black text-slate-300 uppercase">VTR {req.vtr}</span>
                 </div>
                 <h4 className="font-black text-[#003366] text-lg mb-4 truncate">{req.requesterName}</h4>

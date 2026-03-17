@@ -3,7 +3,6 @@ export interface InventoryItem {
   id: string;
   name: string;
   balanceItabaiana: number;
-  balanceDores: number;
 }
 
 export interface RequestedItem {
@@ -27,7 +26,7 @@ export interface Transaction {
   itemId: string;
   type: 'in' | 'out';
   quantity: number;
-  region: 'ITABAIANA' | 'DORES';
+  region: 'ITABAIANA';
   timestamp: number;
   description: string;
 }

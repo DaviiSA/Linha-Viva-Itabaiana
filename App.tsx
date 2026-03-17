@@ -20,8 +20,7 @@ const migrateInventory = (data: any): InventoryItem[] => {
     .map((item: any) => ({
       id: String(item.ID_MATERIAL || item.id || '').trim(),
       name: String(item.MATERIAL || item.name || '').toUpperCase().trim(),
-      balanceItabaiana: Number(item.SALDO_ITABAIANA ?? item.balanceItabaiana ?? 0),
-      balanceDores: Number(item.SALDO_DORES ?? item.balanceDores ?? 0)
+      balanceItabaiana: Number(item.SALDO_ITABAIANA ?? item.balanceItabaiana ?? 0)
     }))
     .filter((item: any) => item.id !== "" && !item.name.includes("STATUS") && !item.name.includes("DATA"));
 };
@@ -225,8 +224,7 @@ const App: React.FC = () => {
     const cleanPayload = updated.map(i => ({
       ID_MATERIAL: i.id,
       MATERIAL: i.name,
-      SALDO_ITABAIANA: i.balanceItabaiana,
-      SALDO_DORES: i.balanceDores
+      SALDO_ITABAIANA: i.balanceItabaiana
     }));
     await syncToGoogleSheets(cleanPayload, 'ATUALIZAR_ESTOQUE_TOTAL');
   };
@@ -240,8 +238,7 @@ const App: React.FC = () => {
       if (i.id === transaction.itemId) {
         return {
           ...i,
-          balanceItabaiana: transaction.region === 'ITABAIANA' ? Math.max(0, i.balanceItabaiana + delta) : i.balanceItabaiana,
-          balanceDores: transaction.region === 'DORES' ? Math.max(0, i.balanceDores + delta) : i.balanceDores
+          balanceItabaiana: Math.max(0, i.balanceItabaiana + delta)
         };
       }
       return i;
@@ -254,17 +251,16 @@ const App: React.FC = () => {
       DATA: new Date().toLocaleString('pt-BR'),
       ID_MATERIAL: item.id,
       MATERIAL: item.name,
-      MOVIMENTACAO: `${transaction.type === 'in' ? 'ENTRADA' : 'SAÍDA'} (${transaction.region})`,
+      MOVIMENTACAO: `${transaction.type === 'in' ? 'ENTRADA' : 'SAÍDA'} (ITABAIANA)`,
       QUANTIDADE: transaction.quantity,
       OBSERVACAO: transaction.description.toUpperCase(),
-      SALDO_FINAL: transaction.region === 'ITABAIANA' ? targetItem?.balanceItabaiana : targetItem?.balanceDores
+      SALDO_FINAL: targetItem?.balanceItabaiana
     }, 'MOVIMENTACAO_ESTOQUE');
 
     const cleanPayload = updatedInv.map(i => ({
       ID_MATERIAL: i.id,
       MATERIAL: i.name,
-      SALDO_ITABAIANA: i.balanceItabaiana,
-      SALDO_DORES: i.balanceDores
+      SALDO_ITABAIANA: i.balanceItabaiana
     }));
     await syncToGoogleSheets(cleanPayload, 'ATUALIZAR_ESTOQUE_TOTAL');
   };
@@ -301,12 +297,11 @@ const App: React.FC = () => {
 
     if (status === 'served') {
       let currentInv = [...inventory];
-      const regionKey = request.region === 'ITABAIANA' ? 'balanceItabaiana' : 'balanceDores';
       
       for (const reqItem of request.items) {
         currentInv = currentInv.map(invItem => {
           if (invItem.name === reqItem.itemName || invItem.id === reqItem.itemId) {
-            return { ...invItem, [regionKey]: Math.max(0, invItem[regionKey] - reqItem.quantity) };
+            return { ...invItem, balanceItabaiana: Math.max(0, invItem.balanceItabaiana - reqItem.quantity) };
           }
           return invItem;
         });
@@ -315,7 +310,7 @@ const App: React.FC = () => {
           DATA: new Date().toLocaleString('pt-BR'),
           ID_MATERIAL: reqItem.itemId,
           MATERIAL: reqItem.itemName.toUpperCase(),
-          MOVIMENTACAO: `SAÍDA (${request.region})`,
+          MOVIMENTACAO: `SAÍDA (ITABAIANA)`,
           QUANTIDADE: reqItem.quantity,
           OBSERVACAO: `ATENDIMENTO VTR ${request.vtr} - ${request.requesterName}`
         }, 'MOVIMENTACAO_ESTOQUE');
@@ -328,8 +323,7 @@ const App: React.FC = () => {
       const cleanPayload = currentInv.map(i => ({
         ID_MATERIAL: i.id,
         MATERIAL: i.name,
-        SALDO_ITABAIANA: i.balanceItabaiana,
-        SALDO_DORES: i.balanceDores
+        SALDO_ITABAIANA: i.balanceItabaiana
       }));
       await syncToGoogleSheets(cleanPayload, 'ATUALIZAR_ESTOQUE_TOTAL');
     }
