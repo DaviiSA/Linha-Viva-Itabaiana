@@ -8,6 +8,7 @@ import Home from './screens/Home';
 import AdminDashboard from './screens/AdminDashboard';
 import RequestForm from './screens/RequestForm';
 import AdminLogin from './screens/AdminLogin';
+import StockView from './screens/StockView';
 
 // Converte dados crus da planilha para o Formato de Inventário do App
 const migrateInventory = (data: any): InventoryItem[] => {
@@ -65,7 +66,10 @@ const App: React.FC = () => {
     const saved = localStorage.getItem('requests');
     return saved ? migrateRequests(JSON.parse(saved)) : [];
   });
-  const [sheetsUrl, setSheetsUrl] = useState<string>(() => localStorage.getItem('sheetsUrl') || GOOGLE_SHEETS_URL);
+  const [sheetsUrl, setSheetsUrl] = useState<string>(() => {
+    const saved = localStorage.getItem('sheetsUrl');
+    return saved || GOOGLE_SHEETS_URL;
+  });
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncError, setSyncError] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -349,6 +353,7 @@ const App: React.FC = () => {
             <Route path="/" element={<Home />} />
             <Route path="/admin/login" element={<AdminLogin />} />
             <Route path="/admin/dashboard" element={<AdminDashboard inventory={inventory} requests={requests} addTransaction={addTransaction} addItem={addItem} updateRequestStatus={updateRequestStatus} setInventory={setInventory} sheetsUrl={sheetsUrl} setSheetsUrl={setSheetsUrl} fetchFromSheets={fetchFromSheets} lastSync={lastSync} syncError={syncError} errorMsg={errorMsg} />} />
+            <Route path="/stock" element={<StockView inventory={inventory} />} />
             <Route path="/request" element={<RequestForm inventory={inventory} addRequest={addRequest} isSyncing={isSyncing} />} />
           </Routes>
         </main>

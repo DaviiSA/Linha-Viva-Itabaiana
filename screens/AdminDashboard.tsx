@@ -319,6 +319,32 @@ const AdminDashboard: React.FC<Props> = ({
             <input type="text" className="w-full p-4 bg-slate-50 border-2 rounded-xl outline-none font-bold text-[10px] text-slate-600 focus:border-[#003366] transition-colors" value={sheetsUrl} onChange={e => setSheetsUrl(e.target.value)} />
             <button onClick={() => setSheetsUrl(GOOGLE_SHEETS_URL)} className="w-full py-4 text-[#003366] font-black text-[10px] uppercase hover:underline decoration-2 underline-offset-4">Resetar URL para o Padrão</button>
           </div>
+
+          <div className="pt-6 border-t border-slate-100">
+            <h4 className="text-sm font-black text-[#003366] uppercase mb-4">Compartilhar Acesso</h4>
+            <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100 space-y-3">
+              <p className="text-[10px] font-bold text-slate-500 leading-relaxed uppercase">
+                Envie este link para que outras pessoas possam consultar o estoque e fazer solicitações:
+              </p>
+              <div className="flex gap-2">
+                <input 
+                  type="text" 
+                  readOnly 
+                  value={window.location.origin + window.location.pathname} 
+                  className="flex-1 p-3 bg-white border rounded-xl text-[10px] font-mono text-slate-400 outline-none"
+                />
+                <button 
+                  onClick={() => {
+                    navigator.clipboard.writeText(window.location.origin + window.location.pathname);
+                    alert('Link copiado para a área de transferência!');
+                  }}
+                  className="px-4 bg-[#003366] text-white rounded-xl font-black text-[10px] uppercase shadow-sm"
+                >
+                  Copiar
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
