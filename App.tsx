@@ -10,23 +10,27 @@ import RequestForm from './screens/RequestForm';
 import AdminLogin from './screens/AdminLogin';
 
 // Converte dados crus da planilha para o Formato de Inventário do App
-const migrateInventory = (items: any[]): InventoryItem[] => {
-  if (!Array.isArray(items)) return [];
+const migrateInventory = (data: any): InventoryItem[] => {
+  const items = Array.isArray(data) ? data : (data?.data && Array.isArray(data.data) ? data.data : []);
+  if (items.length === 0) return [];
+  
   return items
-    .filter(item => item && (item.ID_MATERIAL || item.id))
-    .map(item => ({
+    .filter((item: any) => item && (item.ID_MATERIAL || item.id))
+    .map((item: any) => ({
       id: String(item.ID_MATERIAL || item.id || '').trim(),
       name: String(item.MATERIAL || item.name || '').toUpperCase().trim(),
       balanceItabaiana: Number(item.SALDO_ITABAIANA ?? item.balanceItabaiana ?? 0),
       balanceDores: Number(item.SALDO_DORES ?? item.balanceDores ?? 0)
     }))
-    .filter(item => item.id !== "" && !item.name.includes("STATUS") && !item.name.includes("DATA"));
+    .filter((item: any) => item.id !== "" && !item.name.includes("STATUS") && !item.name.includes("DATA"));
 };
 
 // Converte dados crus da planilha para o Formato de Pedidos do App
-const migrateRequests = (items: any[]): MaterialRequest[] => {
-  if (!Array.isArray(items)) return [];
-  return items.map(item => {
+const migrateRequests = (data: any): MaterialRequest[] => {
+  const items = Array.isArray(data) ? data : (data?.data && Array.isArray(data.data) ? data.data : []);
+  if (items.length === 0) return [];
+
+  return items.map((item: any) => {
     if (!item || (!item.ID_PEDIDO && !item.id)) return null;
 
     const itemsRaw = String(item.ITENS || '');
@@ -48,7 +52,7 @@ const migrateRequests = (items: any[]): MaterialRequest[] => {
       timestamp: item.DATA ? new Date(item.DATA).getTime() : Date.now(),
       items: parsedItems
     } as MaterialRequest;
-  }).filter((r): r is MaterialRequest => r !== null && r.id !== "");
+  }).filter((r: any): r is MaterialRequest => r !== null && r.id !== "");
 };
 
 const App: React.FC = () => {
@@ -57,7 +61,10 @@ const App: React.FC = () => {
     return saved ? migrateInventory(JSON.parse(saved)) : INITIAL_INVENTORY;
   });
 
-  const [requests, setRequests] = useState<MaterialRequest[]>([]);
+  const [requests, setRequests] = useState<MaterialRequest[]>(() => {
+    const saved = localStorage.getItem('requests');
+    return saved ? migrateRequests(JSON.parse(saved)) : [];
+  });
   const [sheetsUrl, setSheetsUrl] = useState<string>(() => localStorage.getItem('sheetsUrl') || GOOGLE_SHEETS_URL);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncError, setSyncError] = useState(false);
@@ -104,16 +111,22 @@ const App: React.FC = () => {
         localStorage.setItem('inventory', JSON.stringify(filteredInv));
       }
 
-      // 2. Busca Pedidos (Opcional, não quebra se falhar)
+      // 2. Busca Pedidos
       try {
         const reqRes = await fetch(`${urlToUse}?action=read_requests&t=${Date.now()}`);
         if (reqRes.ok) {
           const cloudReq = await reqRes.json();
           const filteredReq = migrateRequests(cloudReq);
           setRequests(filteredReq);
+          localStorage.setItem('requests', JSON.stringify(filteredReq));
+        } else {
+          console.warn(`Aviso: Falha ao carregar pedidos (HTTP ${reqRes.status})`);
         }
       } catch (reqErr) {
-        console.warn("Aviso: Falha ao carregar pedidos (verifique se a função read_requests existe no script).", reqErr);
+        console.warn("Falha ao carregar pedidos. Verifique se a função read_requests existe no script.", reqErr);
+        // Tenta carregar pedidos do cache se falhar
+        const savedReq = localStorage.getItem('requests');
+        if (savedReq) setRequests(migrateRequests(JSON.parse(savedReq)));
       }
 
       setLastSync(Date.now());
@@ -245,6 +258,15 @@ const App: React.FC = () => {
 
   const addRequest = async (request: Omit<MaterialRequest, 'id' | 'timestamp' | 'status'>) => {
     const requestId = `PED-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
+    const newRequest: MaterialRequest = {
+      ...request,
+      id: requestId,
+      timestamp: Date.now(),
+      status: 'pending'
+    };
+
+    // Atualização otimista local
+    setRequests(prev => [newRequest, ...prev]);
     
     await syncToGoogleSheets({
       ID_PEDIDO: requestId,
@@ -260,6 +282,9 @@ const App: React.FC = () => {
   const updateRequestStatus = async (id: string, status: 'pending' | 'served') => {
     const request = requests.find(r => r.id === id);
     if (!request || request.status === status) return;
+
+    // Atualização otimista local do status do pedido
+    setRequests(prev => prev.map(r => r.id === id ? { ...r, status } : r));
 
     if (status === 'served') {
       let currentInv = [...inventory];
