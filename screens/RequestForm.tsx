@@ -90,23 +90,23 @@ const RequestForm: React.FC<Props> = ({ inventory, addRequest, isSyncing }) => {
   }
 
   return (
-    <div className="p-4 md:p-8 max-w-4xl mx-auto animate-fade-in-up">
-      <div className="bg-white p-6 md:p-12 rounded-[3rem] shadow-2xl border border-slate-50">
-        <h2 className="text-3xl font-black text-[#003366] text-center mb-10">Solicitar <span className="text-[#FF8C00]">Material</span></h2>
+    <div className="p-2 md:p-8 max-w-4xl mx-auto animate-fade-in-up">
+      <div className="bg-white p-5 md:p-12 rounded-[2.5rem] md:rounded-[3rem] shadow-2xl border border-slate-50">
+        <h2 className="text-2xl md:text-3xl font-black text-[#003366] text-center mb-6 md:mb-10">Solicitar <span className="text-[#FF8C00]">Material</span></h2>
         
-        <form onSubmit={handleSubmit} className="space-y-8">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <form onSubmit={handleSubmit} className="space-y-6 md:space-y-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
             <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Retirar em:</label>
               <div className="flex bg-slate-100 p-1 rounded-2xl">
-                <button type="button" onClick={() => { setRegion('ITABAIANA'); setSelectedItems([]); }} className={`flex-1 py-4 rounded-xl font-black text-[10px] uppercase transition-all ${region === 'ITABAIANA' ? 'bg-white text-[#003366] shadow-sm' : 'text-slate-400'}`}>Itabaiana</button>
-                <button type="button" onClick={() => { setRegion('DORES'); setSelectedItems([]); }} className={`flex-1 py-4 rounded-xl font-black text-[10px] uppercase transition-all ${region === 'DORES' ? 'bg-white text-[#003366] shadow-sm' : 'text-slate-400'}`}>Dores</button>
+                <button type="button" onClick={() => { setRegion('ITABAIANA'); setSelectedItems([]); }} className={`flex-1 py-3 md:py-4 rounded-xl font-black text-[10px] uppercase transition-all ${region === 'ITABAIANA' ? 'bg-white text-[#003366] shadow-sm' : 'text-slate-400'}`}>Itabaiana</button>
+                <button type="button" onClick={() => { setRegion('DORES'); setSelectedItems([]); }} className={`flex-1 py-3 md:py-4 rounded-xl font-black text-[10px] uppercase transition-all ${region === 'DORES' ? 'bg-white text-[#003366] shadow-sm' : 'text-slate-400'}`}>Dores</button>
               </div>
             </div>
 
             <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">VTR / Viatura</label>
-              <select className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#003366] outline-none font-black text-[#003366] transition-colors" value={vtr} onChange={e => setVtr(e.target.value)} required>
+              <select className="w-full p-3.5 md:p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#003366] outline-none font-black text-[#003366] transition-colors" value={vtr} onChange={e => setVtr(e.target.value)} required>
                 <option value="" className="text-slate-400">Selecione...</option>
                 {VEHICLES.map(v => <option key={v} value={v} className="text-slate-800 font-bold">VTR {v}</option>)}
               </select>
@@ -114,20 +114,20 @@ const RequestForm: React.FC<Props> = ({ inventory, addRequest, isSyncing }) => {
 
             <div className="md:col-span-2 space-y-2">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nome do Solicitante</label>
-              <input type="text" className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none font-bold uppercase text-slate-800 placeholder:text-slate-300 focus:border-[#003366] transition-colors" placeholder="Nome Completo" value={requesterName} onChange={e => setRequesterName(e.target.value)} required />
+              <input type="text" className="w-full p-3.5 md:p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none font-bold uppercase text-slate-800 placeholder:text-slate-300 focus:border-[#003366] transition-colors" placeholder="Nome Completo" value={requesterName} onChange={e => setRequesterName(e.target.value)} required />
             </div>
           </div>
 
-          <div className="bg-slate-50 p-6 md:p-10 rounded-[2.5rem] space-y-6 relative shadow-inner">
-            <div className="absolute -top-3 left-10 bg-white px-4 py-1 text-[9px] font-black text-[#FF8C00] uppercase tracking-widest border rounded-full">Estoque Disponível</div>
+          <div className="bg-slate-50 p-4 md:p-10 rounded-[2rem] md:rounded-[2.5rem] space-y-4 md:space-y-6 relative shadow-inner">
+            <div className="absolute -top-3 left-6 md:left-10 bg-white px-4 py-1 text-[9px] font-black text-[#FF8C00] uppercase tracking-widest border rounded-full">Estoque Disponível</div>
             
-            <div className="flex flex-col md:flex-row gap-4 items-end" ref={dropdownRef}>
-              <div className="flex-1 space-y-2 relative">
+            <div className="flex flex-col md:flex-row gap-3 md:gap-4 items-end" ref={dropdownRef}>
+              <div className="w-full flex-1 space-y-2 relative">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Buscar Material</label>
                 <input 
                   type="text" 
                   placeholder="Ex: Abracadeira..." 
-                  className="w-full p-4 bg-white border-2 border-slate-100 rounded-2xl outline-none font-bold text-slate-800 placeholder:text-slate-400 focus:border-[#FF8C00] transition-colors" 
+                  className="w-full p-3.5 md:p-4 bg-white border-2 border-slate-100 rounded-2xl outline-none font-bold text-slate-800 placeholder:text-slate-400 focus:border-[#FF8C00] transition-colors" 
                   value={searchTerm} 
                   onFocus={() => setIsDropdownOpen(true)} 
                   onChange={e => { setSearchTerm(e.target.value); setIsDropdownOpen(true); }} 
@@ -143,12 +143,12 @@ const RequestForm: React.FC<Props> = ({ inventory, addRequest, isSyncing }) => {
                           key={item.id} 
                           type="button" 
                           onClick={() => { setCurrentItem({ ...currentItem, itemId: item.id }); setSearchTerm(item.name); setIsDropdownOpen(false); }} 
-                          className="w-full text-left px-5 py-4 hover:bg-orange-50 border-b border-slate-50 last:border-0 group transition-colors"
+                          className="w-full text-left px-4 md:px-5 py-3 md:py-4 hover:bg-orange-50 border-b border-slate-50 last:border-0 group transition-colors"
                         >
-                          <div className="text-[11px] font-black uppercase truncate text-slate-900 group-hover:text-[#FF8C00]">{item.name}</div>
+                          <div className="text-[10px] md:text-[11px] font-black uppercase truncate text-slate-900 group-hover:text-[#FF8C00]">{item.name}</div>
                           <div className="flex justify-between items-center mt-1">
-                            <span className="text-[9px] text-slate-400 font-mono font-bold tracking-tighter">CÓDIGO: {item.id}</span>
-                            <span className="text-[10px] font-black text-[#FF8C00] bg-orange-100/50 px-2 py-0.5 rounded-md uppercase">
+                            <span className="text-[8px] md:text-[9px] text-slate-400 font-mono font-bold tracking-tighter">CÓDIGO: {item.id}</span>
+                            <span className="text-[9px] md:text-[10px] font-black text-[#FF8C00] bg-orange-100/50 px-2 py-0.5 rounded-md uppercase">
                               SALDO {region}: {region === 'ITABAIANA' ? item.balanceItabaiana : item.balanceDores}
                             </span>
                           </div>
@@ -158,32 +158,34 @@ const RequestForm: React.FC<Props> = ({ inventory, addRequest, isSyncing }) => {
                   </div>
                 )}
               </div>
-              <div className="w-full md:w-24 space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center block">Qtd</label>
-                <input 
-                  type="number" 
-                  min="1" 
-                  className="w-full p-4 bg-white border-2 border-slate-100 rounded-2xl font-black text-center text-xl text-slate-800 outline-none focus:border-[#FF8C00]" 
-                  value={currentItem.quantity} 
-                  onChange={e => setCurrentItem({...currentItem, quantity: Math.max(1, Number(e.target.value))})} 
-                />
+              <div className="w-full md:w-24 flex md:flex-col items-center gap-2 md:gap-0">
+                <div className="flex-1 md:w-full space-y-1 md:space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center block">Qtd</label>
+                  <input 
+                    type="number" 
+                    min="1" 
+                    className="w-full p-3.5 md:p-4 bg-white border-2 border-slate-100 rounded-2xl font-black text-center text-lg md:text-xl text-slate-800 outline-none focus:border-[#FF8C00]" 
+                    value={currentItem.quantity} 
+                    onChange={e => setCurrentItem({...currentItem, quantity: Math.max(1, Number(e.target.value))})} 
+                  />
+                </div>
+                <button 
+                  type="button" 
+                  onClick={() => handleAddItem()} 
+                  className="mt-5 md:mt-0 bg-[#FF8C00] text-white w-14 h-14 md:w-full md:h-14 rounded-2xl font-black text-2xl shadow-lg shadow-orange-100 hover:bg-orange-600 transition-all active:scale-95 flex items-center justify-center"
+                >
+                  +
+                </button>
               </div>
-              <button 
-                type="button" 
-                onClick={() => handleAddItem()} 
-                className="w-full md:w-auto bg-[#FF8C00] text-white px-8 py-4 rounded-2xl font-black text-2xl shadow-lg shadow-orange-100 hover:bg-orange-600 transition-all active:scale-95 flex items-center justify-center"
-              >
-                +
-              </button>
             </div>
 
             <div className="space-y-3 pt-4 border-t border-slate-200">
               {selectedItems.length > 0 && <h4 className="text-[9px] font-black text-slate-400 uppercase mb-2">Materiais para Retirar em {region}:</h4>}
               {selectedItems.map((item, idx) => (
-                <div key={idx} className="flex justify-between items-center bg-white p-4 rounded-2xl border border-slate-100 shadow-sm animate-scale-up">
-                  <span className="text-xs font-black text-slate-700 uppercase leading-tight max-w-[70%]">{item.itemName}</span>
-                  <div className="flex items-center gap-4">
-                    <span className="bg-orange-50 text-[#FF8C00] px-3 py-1 rounded-lg font-black text-sm border border-orange-100">x{item.quantity}</span>
+                <div key={idx} className="flex justify-between items-center bg-white p-3 md:p-4 rounded-2xl border border-slate-100 shadow-sm animate-scale-up">
+                  <span className="text-[10px] md:text-xs font-black text-slate-700 uppercase leading-tight max-w-[70%]">{item.itemName}</span>
+                  <div className="flex items-center gap-3 md:gap-4">
+                    <span className="bg-orange-50 text-[#FF8C00] px-2 md:px-3 py-1 rounded-lg font-black text-xs md:text-sm border border-orange-100">x{item.quantity}</span>
                     <button type="button" onClick={() => setSelectedItems(prev => prev.filter(i => i.itemId !== item.itemId))} className="text-slate-300 hover:text-red-500 transition-colors">
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                     </button>
@@ -196,7 +198,7 @@ const RequestForm: React.FC<Props> = ({ inventory, addRequest, isSyncing }) => {
           <button 
             type="submit" 
             disabled={isSyncing || selectedItems.length === 0} 
-            className="w-full bg-[#003366] text-white py-6 rounded-3xl font-black text-lg uppercase shadow-2xl shadow-blue-100 disabled:bg-slate-200 disabled:text-slate-400 transition-all active:scale-95 hover:bg-blue-900"
+            className="w-full bg-[#003366] text-white py-5 md:py-6 rounded-2xl md:rounded-3xl font-black text-base md:text-lg uppercase shadow-2xl shadow-blue-100 disabled:bg-slate-200 disabled:text-slate-400 transition-all active:scale-95 hover:bg-blue-900"
           >
             {isSyncing ? 'Sincronizando...' : 'Finalizar Pedido'}
           </button>

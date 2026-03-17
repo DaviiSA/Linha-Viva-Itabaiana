@@ -157,28 +157,27 @@ const AdminDashboard: React.FC<Props> = ({
           </div>
         </div>
       )}
-
-      <div className="bg-white rounded-[2rem] p-6 md:p-10 shadow-sm border border-slate-100 flex flex-col md:flex-row justify-between items-center gap-4">
-        <div className="flex items-center gap-4">
-          <div className="bg-[#003366] p-3 rounded-2xl shadow-lg text-white">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+       <div className="bg-white rounded-[2rem] p-4 md:p-10 shadow-sm border border-slate-100 flex flex-col md:flex-row justify-between items-center gap-4">
+        <div className="flex items-center gap-3 md:gap-4 w-full md:w-auto">
+          <div className="bg-[#003366] p-2.5 md:p-3 rounded-2xl shadow-lg text-white">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 md:h-8 md:w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
           </div>
-          <div>
-            <h2 className="text-2xl font-black text-[#003366]">Painel Administrativo</h2>
-            <p className={`text-[10px] font-bold uppercase tracking-widest ${syncError ? 'text-red-500' : 'text-slate-400'}`}>
+          <div className="flex-1">
+            <h2 className="text-lg md:text-2xl font-black text-[#003366] leading-tight">Painel Administrativo</h2>
+            <p className={`text-[9px] md:text-[10px] font-bold uppercase tracking-widest ${syncError ? 'text-red-500' : 'text-slate-400'}`}>
               {syncError ? '⚠️ Erro na Sincronização' : (lastSync ? `Sincronizado: ${new Date(lastSync).toLocaleTimeString()}` : 'Sem conexão com a nuvem')}
             </p>
           </div>
         </div>
         <div className="flex gap-2 w-full md:w-auto">
-          <button onClick={handleManualSync} className="flex-1 md:px-6 py-3 bg-[#003366] text-white rounded-xl font-black text-[10px] uppercase shadow-md hover:bg-blue-900 transition-colors">Sincronizar Agora</button>
+          <button onClick={handleManualSync} className="flex-1 md:px-6 py-3 bg-[#003366] text-white rounded-xl font-black text-[10px] uppercase shadow-md hover:bg-blue-900 transition-colors">Sincronizar</button>
           <button onClick={() => { sessionStorage.removeItem('isAdmin'); navigate('/'); }} className="flex-1 md:px-6 py-3 bg-slate-100 text-slate-400 rounded-xl font-black text-[10px] uppercase hover:bg-slate-200 transition-colors">Sair</button>
         </div>
       </div>
 
-      <div className="flex bg-slate-100 p-1.5 rounded-2xl">
+      <div className="flex bg-slate-100 p-1 rounded-2xl">
         {['stock', 'requests', 'config'].map(tab => (
-          <button key={tab} onClick={() => setActiveTab(tab as any)} className={`flex-1 py-3.5 rounded-xl font-black text-xs uppercase transition-all ${activeTab === tab ? 'bg-white text-[#003366] shadow-sm' : 'text-slate-400'}`}>
+          <button key={tab} onClick={() => setActiveTab(tab as any)} className={`flex-1 py-3 rounded-xl font-black text-[10px] md:text-xs uppercase transition-all ${activeTab === tab ? 'bg-white text-[#003366] shadow-sm' : 'text-slate-400'}`}>
             {tab === 'stock' ? 'Depósitos' : tab === 'requests' ? 'Pedidos' : 'Config'}
           </button>
         ))}
@@ -186,29 +185,29 @@ const AdminDashboard: React.FC<Props> = ({
 
       {activeTab === 'stock' && (
         <div className="space-y-6 animate-fade-in">
-          <div className="flex flex-col md:flex-row gap-3">
+          <div className="flex flex-col md:flex-row gap-2 md:gap-3">
              <button 
               onClick={() => setSelectedRegional('ALL')} 
-              className={`flex-1 py-4 rounded-2xl font-black text-[10px] uppercase tracking-wider transition-all shadow-sm ${selectedRegional === 'ALL' ? 'bg-[#003366] text-white' : 'bg-white text-slate-400 border border-slate-100 hover:border-blue-200'}`}
+              className={`flex-1 py-3 md:py-4 rounded-2xl font-black text-[9px] md:text-[10px] uppercase tracking-wider transition-all shadow-sm ${selectedRegional === 'ALL' ? 'bg-[#003366] text-white' : 'bg-white text-slate-400 border border-slate-100 hover:border-blue-200'}`}
             >
               Visão Geral
             </button>
             <button 
               onClick={() => setSelectedRegional('ITABAIANA')} 
-              className={`flex-1 py-4 rounded-2xl font-black text-[10px] uppercase tracking-wider transition-all shadow-sm ${selectedRegional === 'ITABAIANA' ? 'bg-[#003366] text-white' : 'bg-white text-slate-400 border border-slate-100 hover:border-blue-200'}`}
+              className={`flex-1 py-3 md:py-4 rounded-2xl font-black text-[9px] md:text-[10px] uppercase tracking-wider transition-all shadow-sm ${selectedRegional === 'ITABAIANA' ? 'bg-[#003366] text-white' : 'bg-white text-slate-400 border border-slate-100 hover:border-blue-200'}`}
             >
-              Depósito Itabaiana
+              Itabaiana
             </button>
             <button 
               onClick={() => setSelectedRegional('DORES')} 
-              className={`flex-1 py-4 rounded-2xl font-black text-[10px] uppercase tracking-wider transition-all shadow-sm ${selectedRegional === 'DORES' ? 'bg-[#FF8C00] text-white' : 'bg-white text-slate-400 border border-slate-100 hover:border-orange-200'}`}
+              className={`flex-1 py-3 md:py-4 rounded-2xl font-black text-[9px] md:text-[10px] uppercase tracking-wider transition-all shadow-sm ${selectedRegional === 'DORES' ? 'bg-[#FF8C00] text-white' : 'bg-white text-slate-400 border border-slate-100 hover:border-orange-200'}`}
             >
-              Depósito Dores
+              Dores
             </button>
           </div>
 
-          <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
-            <div className="p-6 bg-slate-50 border-b flex flex-col md:flex-row gap-4 justify-between items-center">
+          <div className="bg-white rounded-[2rem] md:rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden">
+            <div className="p-4 md:p-6 bg-slate-50 border-b flex flex-col md:flex-row gap-4 justify-between items-center">
               <div className="relative w-full md:w-80">
                 <input 
                   type="text" 
@@ -219,12 +218,14 @@ const AdminDashboard: React.FC<Props> = ({
                 />
                 <svg className="absolute left-3 top-3.5 h-4 w-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
               </div>
-              <div className="flex gap-3 w-full md:w-auto">
-                <button onClick={() => setShowAddModal(true)} className="flex-1 md:flex-none bg-[#003366] text-white px-6 py-3.5 rounded-xl font-black text-[10px] uppercase shadow-lg hover:bg-blue-900 transition-colors">+ Novo Material</button>
-                <button onClick={() => setShowMovementModal(true)} className="flex-1 md:flex-none bg-[#FF8C00] text-white px-6 py-3.5 rounded-xl font-black text-[10px] uppercase shadow-lg shadow-orange-100 hover:bg-orange-600 transition-colors">Movimentar Estoque</button>
+              <div className="grid grid-cols-2 md:flex gap-2 md:gap-3 w-full md:w-auto">
+                <button onClick={() => setShowAddModal(true)} className="bg-[#003366] text-white px-4 md:px-6 py-3.5 rounded-xl font-black text-[9px] md:text-[10px] uppercase shadow-lg hover:bg-blue-900 transition-colors">+ Novo</button>
+                <button onClick={() => setShowMovementModal(true)} className="bg-[#FF8C00] text-white px-4 md:px-6 py-3.5 rounded-xl font-black text-[9px] md:text-[10px] uppercase shadow-lg shadow-orange-100 hover:bg-orange-600 transition-colors">Movimentar</button>
               </div>
             </div>
-            <div className="overflow-x-auto no-scrollbar">
+            
+            {/* Desktop Table */}
+            <div className="hidden md:block overflow-x-auto no-scrollbar">
               <table className="w-full text-left">
                 <thead className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b">
                   <tr>
@@ -258,10 +259,37 @@ const AdminDashboard: React.FC<Props> = ({
                   ))}
                 </tbody>
               </table>
-              {filteredInventory.length === 0 && (
-                <div className="p-20 text-center font-black text-slate-200 uppercase tracking-widest">Nenhum material encontrado</div>
-              )}
             </div>
+
+            {/* Mobile Card List */}
+            <div className="md:hidden divide-y divide-slate-50">
+              {filteredInventory.map(item => (
+                <div key={item.id} className="p-4 space-y-3">
+                  <div>
+                    <div className="text-[11px] font-black text-[#003366] uppercase leading-tight">{item.name}</div>
+                    <div className="text-[9px] text-slate-300 font-mono mt-1">ID: {item.id}</div>
+                  </div>
+                  <div className="flex justify-between items-center bg-slate-50/50 p-2 rounded-xl">
+                    {(selectedRegional === 'ALL' || selectedRegional === 'ITABAIANA') && (
+                      <div className="flex flex-col items-center flex-1">
+                        <span className="text-[8px] font-black text-slate-400 uppercase">Itabaiana</span>
+                        <span className={`text-sm font-black ${item.balanceItabaiana <= CRITICAL_THRESHOLD ? 'text-red-500' : 'text-slate-800'}`}>{item.balanceItabaiana}</span>
+                      </div>
+                    )}
+                    {(selectedRegional === 'ALL' || selectedRegional === 'DORES') && (
+                      <div className="flex flex-col items-center flex-1 border-l border-slate-100">
+                        <span className="text-[8px] font-black text-slate-400 uppercase">Dores</span>
+                        <span className={`text-sm font-black ${item.balanceDores <= CRITICAL_THRESHOLD ? 'text-red-500' : 'text-slate-800'}`}>{item.balanceDores}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {filteredInventory.length === 0 && (
+              <div className="p-20 text-center font-black text-slate-200 uppercase tracking-widest">Nenhum material encontrado</div>
+            )}
           </div>
         </div>
       )}

@@ -48,7 +48,7 @@ const StockView: React.FC<Props> = ({ inventory }) => {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left">
             <thead className="bg-slate-50 text-slate-500 text-[10px] uppercase tracking-widest font-black">
               <tr>
@@ -80,16 +80,45 @@ const StockView: React.FC<Props> = ({ inventory }) => {
                   </td>
                 </tr>
               ))}
-              {filteredInventory.length === 0 && (
-                <tr>
-                  <td colSpan={3} className="px-6 py-12 text-center text-slate-400 font-bold uppercase tracking-widest">
-                    Nenhum material encontrado
-                  </td>
-                </tr>
-              )}
             </tbody>
           </table>
         </div>
+
+        {/* Mobile Card Layout */}
+        <div className="md:hidden divide-y divide-slate-100">
+          {filteredInventory.map(item => (
+            <div key={item.id} className="p-4 space-y-3">
+              <div>
+                <div className="font-bold text-[#003366] text-sm leading-tight">{item.name}</div>
+                <div className="text-[10px] text-slate-400 font-mono mt-1">ID: {item.id}</div>
+              </div>
+              <div className="flex justify-between items-center pt-2">
+                <div className="flex flex-col items-center gap-1">
+                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Itabaiana</span>
+                  <span className={`px-4 py-1 rounded-full text-xs font-black ${
+                    item.balanceItabaiana <= CRITICAL_THRESHOLD ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'
+                  }`}>
+                    {item.balanceItabaiana}
+                  </span>
+                </div>
+                <div className="flex flex-col items-center gap-1">
+                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Dores</span>
+                  <span className={`px-4 py-1 rounded-full text-xs font-black ${
+                    item.balanceDores <= CRITICAL_THRESHOLD ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'
+                  }`}>
+                    {item.balanceDores}
+                  </span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {filteredInventory.length === 0 && (
+          <div className="px-6 py-12 text-center text-slate-400 font-bold uppercase tracking-widest">
+            Nenhum material encontrado
+          </div>
+        )}
       </div>
     </div>
   );
