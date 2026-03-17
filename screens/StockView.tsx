@@ -6,9 +6,12 @@ import { CRITICAL_THRESHOLD } from '../constants';
 
 interface Props {
   inventory: InventoryItem[];
+  isSyncing?: boolean;
+  fetchFromSheets?: () => Promise<void>;
+  lastSync?: number | null;
 }
 
-const StockView: React.FC<Props> = ({ inventory }) => {
+const StockView: React.FC<Props> = ({ inventory, isSyncing, fetchFromSheets, lastSync }) => {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -29,7 +32,26 @@ const StockView: React.FC<Props> = ({ inventory }) => {
           </svg>
           VOLTAR
         </button>
-        <h2 className="text-2xl font-black text-[#003366] uppercase">Estoque Disponível</h2>
+        <div className="flex flex-col items-end gap-1">
+          <h2 className="text-xl md:text-2xl font-black text-[#003366] uppercase">Estoque Disponível</h2>
+          <div className="flex items-center gap-2">
+            {lastSync && (
+              <span className="text-[8px] font-bold text-slate-400 uppercase">
+                Atualizado: {new Date(lastSync).toLocaleTimeString()}
+              </span>
+            )}
+            <button 
+              onClick={() => fetchFromSheets?.()}
+              disabled={isSyncing}
+              className={`p-1.5 rounded-lg transition-all ${isSyncing ? 'bg-slate-100 text-slate-300 animate-spin' : 'bg-blue-50 text-[#003366] hover:bg-blue-100'}`}
+              title="Sincronizar agora"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M4 4v5h5M20 20v-5h-5M20 9.474a10 10 0 10-1.526 8.526" />
+              </svg>
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-100">

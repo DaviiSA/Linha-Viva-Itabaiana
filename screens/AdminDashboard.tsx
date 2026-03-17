@@ -358,13 +358,14 @@ const AdminDashboard: React.FC<Props> = ({
                 <input 
                   type="text" 
                   readOnly 
-                  value={window.location.origin + window.location.pathname} 
+                  value={`${window.location.origin}${window.location.pathname}?url=${encodeURIComponent(sheetsUrl)}`} 
                   className="flex-1 p-3 bg-white border rounded-xl text-[10px] font-mono text-slate-400 outline-none"
                 />
                 <button 
                   onClick={() => {
-                    navigator.clipboard.writeText(window.location.origin + window.location.pathname);
-                    alert('Link copiado para a área de transferência!');
+                    const shareUrl = `${window.location.origin}${window.location.pathname}?url=${encodeURIComponent(sheetsUrl)}`;
+                    navigator.clipboard.writeText(shareUrl);
+                    alert('Link de acesso com configuração copiado!');
                   }}
                   className="px-4 bg-[#003366] text-white rounded-xl font-black text-[10px] uppercase shadow-sm"
                 >

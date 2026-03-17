@@ -67,6 +67,15 @@ const App: React.FC = () => {
     return saved ? migrateRequests(JSON.parse(saved)) : [];
   });
   const [sheetsUrl, setSheetsUrl] = useState<string>(() => {
+    // 1. Tenta pegar da URL (prioridade máxima para compartilhamento)
+    const params = new URLSearchParams(window.location.search);
+    const urlParam = params.get('url');
+    if (urlParam && urlParam.startsWith('http')) {
+      localStorage.setItem('sheetsUrl', urlParam);
+      return urlParam;
+    }
+    
+    // 2. Tenta pegar do localStorage
     const saved = localStorage.getItem('sheetsUrl');
     return saved || GOOGLE_SHEETS_URL;
   });
@@ -350,11 +359,11 @@ const App: React.FC = () => {
         </header>
         <main className="flex-1 overflow-y-auto smooth-scroll">
           <Routes>
-            <Route path="/" element={<Home />} />
+            <Route path="/" element={<Home isSyncing={isSyncing} lastSync={lastSync} />} />
             <Route path="/admin/login" element={<AdminLogin />} />
             <Route path="/admin/dashboard" element={<AdminDashboard inventory={inventory} requests={requests} addTransaction={addTransaction} addItem={addItem} updateRequestStatus={updateRequestStatus} setInventory={setInventory} sheetsUrl={sheetsUrl} setSheetsUrl={setSheetsUrl} fetchFromSheets={fetchFromSheets} lastSync={lastSync} syncError={syncError} errorMsg={errorMsg} />} />
-            <Route path="/stock" element={<StockView inventory={inventory} />} />
-            <Route path="/request" element={<RequestForm inventory={inventory} addRequest={addRequest} isSyncing={isSyncing} />} />
+            <Route path="/stock" element={<StockView inventory={inventory} isSyncing={isSyncing} fetchFromSheets={fetchFromSheets} lastSync={lastSync} />} />
+            <Route path="/request" element={<RequestForm inventory={inventory} addRequest={addRequest} isSyncing={isSyncing} fetchFromSheets={fetchFromSheets} lastSync={lastSync} />} />
           </Routes>
         </main>
         <footer className="bg-white text-gray-400 text-[10px] p-3 text-center border-t">

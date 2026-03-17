@@ -8,9 +8,11 @@ interface Props {
   inventory: InventoryItem[];
   addRequest: (request: Omit<MaterialRequest, 'id' | 'timestamp' | 'status'>) => void;
   isSyncing: boolean;
+  fetchFromSheets?: () => Promise<void>;
+  lastSync?: number | null;
 }
 
-const RequestForm: React.FC<Props> = ({ inventory, addRequest, isSyncing }) => {
+const RequestForm: React.FC<Props> = ({ inventory, addRequest, isSyncing, fetchFromSheets, lastSync }) => {
   const navigate = useNavigate();
   const [vtr, setVtr] = useState('');
   const [region, setRegion] = useState<'ITABAIANA' | 'DORES'>('ITABAIANA');
@@ -92,7 +94,36 @@ const RequestForm: React.FC<Props> = ({ inventory, addRequest, isSyncing }) => {
   return (
     <div className="p-2 md:p-8 max-w-4xl mx-auto animate-fade-in-up">
       <div className="bg-white p-5 md:p-12 rounded-[2.5rem] md:rounded-[3rem] shadow-2xl border border-slate-50">
-        <h2 className="text-2xl md:text-3xl font-black text-[#003366] text-center mb-6 md:mb-10">Solicitar <span className="text-[#FF8C00]">Material</span></h2>
+        <div className="flex items-center justify-between mb-6 md:mb-10">
+          <button
+            type="button"
+            onClick={() => navigate('/')}
+            className="p-2 text-slate-400 hover:text-[#003366] transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            </svg>
+          </button>
+          <h2 className="text-2xl md:text-3xl font-black text-[#003366] text-center">Solicitar <span className="text-[#FF8C00]">Material</span></h2>
+          <button 
+            type="button"
+            onClick={() => fetchFromSheets?.()}
+            disabled={isSyncing}
+            className={`p-2 rounded-xl transition-all ${isSyncing ? 'bg-slate-100 text-slate-300 animate-spin' : 'bg-blue-50 text-[#003366] hover:bg-blue-100'}`}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M4 4v5h5M20 20v-5h-5M20 9.474a10 10 0 10-1.526 8.526" />
+            </svg>
+          </button>
+        </div>
+        
+        {lastSync && (
+          <div className="text-center -mt-8 mb-6">
+            <span className="text-[8px] font-bold text-slate-300 uppercase tracking-widest">
+              Estoque atualizado: {new Date(lastSync).toLocaleTimeString()}
+            </span>
+          </div>
+        )}
         
         <form onSubmit={handleSubmit} className="space-y-6 md:space-y-8">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">

@@ -3,7 +3,12 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BucketTruckIcon } from '../components/Icons';
 
-const Home: React.FC = () => {
+interface Props {
+  isSyncing?: boolean;
+  lastSync?: number | null;
+}
+
+const Home: React.FC<Props> = ({ isSyncing, lastSync }) => {
   const navigate = useNavigate();
 
   return (
@@ -17,6 +22,15 @@ const Home: React.FC = () => {
         <h2 className="text-3xl md:text-5xl font-black text-[#003366] tracking-tight">
           Linha Viva <span className="text-[#FF8C00]">Itabaiana</span>
         </h2>
+        
+        {lastSync && (
+          <div className="flex items-center justify-center gap-2">
+            <div className={`w-2 h-2 rounded-full ${isSyncing ? 'bg-blue-400 animate-pulse' : 'bg-green-400'}`}></div>
+            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+              {isSyncing ? 'Sincronizando...' : `Dados Atualizados: ${new Date(lastSync).toLocaleTimeString()}`}
+            </span>
+          </div>
+        )}
         <p className="text-slate-500 font-medium max-w-sm mx-auto text-sm md:text-lg px-4">
           Gestão inteligente de materiais e suporte operacional para frotas.
         </p>
